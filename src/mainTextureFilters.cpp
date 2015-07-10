@@ -245,44 +245,100 @@ void drawing(vector<Mat>& edge, vector<Mat>& bar, vector<Mat>& rot, int n_sigmas
 
 void  apply_filterbank(Mat &img,
                        vector<vector<Mat> > &filterbank,
-                       vector<vector<Mat> > &response)
+                       vector<vector<Mat> > &response,
+                       int n_sigmas, int n_orientations)
 {
-    response.resize(filterbank.size());
-    for(uint type = 0; type < filterbank.size(); type++)
+    response.resize(3);
+    vector<Mat>& edges = filterbank[0];
+    vector<Mat>& bar = filterbank[1];
+    vector<Mat>& rot = filterbank[2];
+    int i = 0;
+    for(int sigmaIndex = 0; sigmaIndex < n_sigmas; sigmaIndex++)
     {
-        for(uint i = 0; i < filterbank[type].size(); i++)
+        Mat newMat = Mat::zeros(img.rows, img.cols, img.type());
+        for(int orient = 0; orient < n_orientations; orient++)
         {
             Mat dst;
-            filter2D(img, dst,  -1 , filterbank[type][i], Point( -1, -1 ), 0, BORDER_DEFAULT );
-            response[type].push_back(dst);
+            filter2D(img, dst,  -1 , edges[i], Point( -1, -1 ), 0, BORDER_DEFAULT );
+            newMat = cv::max(dst, newMat);
+            i++;
         }
+        Mat newMatUchar;
+        newMat = cv::abs(newMat);
+        newMat.convertTo(newMatUchar, CV_8UC1);
+        response[0].push_back(newMatUchar);
+    }
+
+    i = 0;
+    for(int sigmaIndex = 0; sigmaIndex < n_sigmas; sigmaIndex++)
+    {
+        Mat newMat = Mat::zeros(img.rows, img.cols, img.type());
+        for(int orient = 0; orient < n_orientations; orient++)
+        {
+            Mat dst;
+            filter2D(img, dst,  -1 , bar[i], Point( -1, -1 ), 0, BORDER_DEFAULT );
+            newMat = max(dst, newMat);
+            i++;
+        }
+        Mat newMatUchar;
+        newMat = cv::abs(newMat);
+        newMat.convertTo(newMatUchar, CV_8UC1);
+        response[1].push_back(newMatUchar);
+    }
+
+    for(uint i = 0; i < 2; i++)
+    {
+        Mat newMat = Mat::zeros(img.rows, img.cols, img.type());
+        Mat dst;
+        filter2D(img, dst,  -1 , rot[i], Point( -1, -1 ), 0, BORDER_DEFAULT );
+        newMat = max(dst, newMat);
+        Mat newMatUchar;
+        newMat = cv::abs(newMat);
+        newMat.convertTo(newMatUchar, CV_8UC1);
+        response[2].push_back(newMatUchar);
+    }
+
+
+}
+
+void normaliseImage(Mat& image, Mat& normalised)
+{
+    normalised = Mat::zeros(image.rows, image.cols, CV_8UC1);
+    uchar* pImage = (uchar*) image.data;
+    uchar* pNormalised = (uchar*)normalised.data;
+    double minVal; double maxVal; Point minLoc; Point maxLoc;
+
+    minMaxLoc(image, &minVal, &maxVal, &minLoc, &maxLoc, noArray());
+
+    for(int i = 0; i < image.rows * image.cols; i++)
+    {
+        *pNormalised = (*pImage - minVal)/ (maxVal - minVal) * 255;
+
+        pImage++;
+        pNormalised++;
     }
 }
 
 void drawingResponce(vector<vector<Mat> > &response)
 {
-    int numInRow = 3;
+    int numInRow = response[0].size();
     int support = response[0][0].cols;
     Mat responceShow = Mat::zeros((1.5 * numInRow + 1) * support, (1.5 * numInRow + 1) * support, CV_8UC1);
     rectangle(responceShow, Rect(0,0, responceShow.cols, responceShow.rows), Scalar(125), -1);
 
     //edges
-    int edgeSize = response[0].size();
-    response[0][0].copyTo(responceShow(Rect(0.5 * support, 0.5 * support, support,support)));
-    response[0][edgeSize/2].copyTo(responceShow(Rect(2 * support, 0.5 * support, support,support)));
-    response[0][edgeSize-1].copyTo(responceShow(Rect(3.5 * support, 0.5 * support, support,support)));
+    for(uint type = 0; type < response.size(); type++)
+    {
+        for(uint imageIndex = 0; imageIndex < response[type].size(); imageIndex++)
+        {
+            Mat normalised;
+            normaliseImage(response[type][imageIndex], normalised);
+            normalised.copyTo(responceShow(Rect((1.5*imageIndex + 0.5) * support, (1.5*type + 0.5) * support, support,support)));
+        }
+    }
 
-    //bar
-    int barSize = response[1].size();
-    response[1][0].copyTo(responceShow(Rect(0.5 * support, 2 * support, support,support)));
-    response[1][barSize/2].copyTo(responceShow(Rect(2 * support, 2 * support, support,support)));
-    response[1][barSize-1].copyTo(responceShow(Rect(3.5 * support, 2 * support, support,support)));
+    resize(responceShow, responceShow, Size(responceShow.cols/8, responceShow.rows/8));
 
-    //rot
-    response[2][0].copyTo(responceShow(Rect(0.5 * support, 3.5 * support, support,support)));
-    response[2][1].copyTo(responceShow(Rect(2 * support, 3.5 * support, support,support)));
-
-    resize(responceShow, responceShow, Size(responceShow.cols/2, responceShow.cols/2));
     imshow("responceShow", responceShow);
 }
 
@@ -292,7 +348,6 @@ int main()
     sigmas.push_back(1);
     sigmas.push_back(2);
     sigmas.push_back(4);
-    sigmas.push_back(8);
     int n_sigmas = sigmas.size();
     int n_orientations = 6;
     vector<Mat > edge, bar, rot;
@@ -303,12 +358,14 @@ int main()
 
     //apply filters to lena
     Mat img = imread("../Lena.jpeg", IMREAD_GRAYSCALE);
+    Mat imgFloat;
+    img.convertTo(imgFloat, CV_32FC1);
     vector<vector<Mat > > filterbank;
     filterbank.push_back(edge);
     filterbank.push_back(bar);
     filterbank.push_back(rot);
     vector<vector<Mat> > response;
-    apply_filterbank(img, filterbank, response);
+    apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
     drawingResponce(response);
 
     waitKey(0);
