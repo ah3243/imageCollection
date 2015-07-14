@@ -478,7 +478,11 @@ int main()
 
     //cluster images
     Mat centers = createSamples(aggImg);
+
     cout << "These are the clusters: " << centers << endl;
+    FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
+    fs << "cluster" << centers;
+    fs.release();
 
     waitKey(0);
 }
