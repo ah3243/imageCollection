@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include "iostream"
 #include <fstream>
 #include "vector"
@@ -326,7 +327,7 @@ void saveImgs(uint num, Mat image) {
     imwrite("images/imageNo1.png", image);
 }
 
-void aggregateImg(uint num, double alpha, Mat aggImg, Mat input) {
+void aggregateImg(uint num, double alpha, Mat &aggImg, Mat input) {
   double beta = 1.0 - alpha;
   if (num == 0) {
     cout << "initialising aggImg" << endl;
@@ -361,12 +362,9 @@ Mat createSamples(Mat input){
 }
 /************************* End **********************************/
 
-void drawingResponce(vector<vector<Mat> > &response) {
+void drawingResponce(vector<vector<Mat> > &response, Mat &aggImg, double &alpha, int &counter) {
     int numInRow = response[0].size();
     int support = response[0][0].cols;
-    int counter = 0;
-    double alpha = 0.5;
-    Mat aggImg = Mat::zeros(response[0][0].rows, response[0][0].cols, CV_8UC1);
     Mat responceShow = Mat::zeros((1.5 * numInRow + 1) * support, (1.5 * numInRow + 1) * support, CV_8UC1);
     rectangle(responceShow, Rect(0,0, responceShow.cols, responceShow.rows), Scalar(125), -1);
 
@@ -385,15 +383,13 @@ void drawingResponce(vector<vector<Mat> > &response) {
             cout << "This is the alpha:" << alpha << "coutner:" << counter << endl;
             normalised.copyTo(responceShow(Rect((1.5*imageIndex + 0.5) * support, (1.5*type + 0.5) * support, support,support)));
             counter++;
+            imshow("aggImg", aggImg);
         }
     }
 
     resize(responceShow, responceShow, Size(responceShow.cols/8, responceShow.rows/8));
 
     imshow("responceShow", responceShow);
-    imshow("aggImg", aggImg);
-    Mat centers = createSamples(aggImg);
-    cout << "These are the clusters: " << centers << endl;
 }
 
 /*************************** START Import images from Dir ****************************/
@@ -410,6 +406,8 @@ bool hasEnding(std::string const &fullString, std::string const &ending) {
 
 int main()
 {
+    Mat aggImg;
+
     vector<float> sigmas;
     sigmas.push_back(1);
     sigmas.push_back(2);
@@ -426,29 +424,61 @@ int main()
     filterbank.push_back(edge);
     filterbank.push_back(bar);
     filterbank.push_back(rot);
+
     vector<vector<Mat> > response;
 
     //apply filters to lena
-    Mat img = imread("../../Lena.png", IMREAD_GRAYSCALE);
-    cout << "This is lena size: " << img.size() << endl;
-    equalizeHist(img, img);
-    cout << "image equalised" << endl;
+    // Mat img = imread("../../Lena.png", IMREAD_GRAYSCALE);
+    // cout << "This is lena size: " << img.size() << endl;
+    // cout << "image equalised" << endl;
 
     // import images from dir
     std::string extTypes[] = {".jpg", ".png", ".bmp"};
-    std::string dirNme = "../../savImgs/test/";
+    std::string dirNme = "../../../TEST_IMAGES/kth-tips/bread/train/";
+
     DIR *dir;
     dir = opendir(dirNme.c_str());
     string imgName;
     struct dirent *ent;
 
+    double alpha = 0.5;
+    int counter =0;
 
-    Mat imgFloat;
-    img.convertTo(imgFloat, CV_32FC1);
+    if(dir != NULL){
+      while ((ent = readdir(dir)) != NULL) {
+        imgName = ent->d_name;
+        if (hasEnding(imgName, ".png")) {
+          cout << "correct extension" << endl;
 
+          // Sort out string Stream
+          std::stringstream ss;
+          ss << dirNme << imgName;
+          std::string imgpath = ss.str();
 
-    apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
-    drawingResponce(response);
+          Mat img = imread(imgpath, CV_LOAD_IMAGE_GRAYSCALE);
+          equalizeHist(img, img);
+
+          cout << "This is imgpath:" << imgpath << " img.size()" << img.size()  << endl;
+          imshow("hello", img);
+          waitKey();
+
+          Mat imgFloat;
+          img.convertTo(imgFloat, CV_32FC1);
+
+          apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
+          drawingResponce(response, aggImg, alpha, counter);
+          response.clear();
+          img.release();
+          imgFloat.release();
+        } else{
+          cout << "incorrect extension" << endl;
+        }
+      }
+    }
+
+    //cluster images
+    Mat centers = createSamples(aggImg);
+    cout << "These are the clusters: " << centers << endl;
 
     waitKey(0);
 }
