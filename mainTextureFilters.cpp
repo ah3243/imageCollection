@@ -20,7 +20,8 @@ using namespace std;
 
 
 using namespace cv;
-typedef unsigned int
+
+typedef unsigned int uint;
 const float PI = 3.1415;
 
 //response = np.exp(-x ** 2 / (2. * sigma ** 2))
@@ -332,7 +333,7 @@ void aggregateImg(uint num, double alpha, Mat aggImg, Mat input) {
     input.copyTo(aggImg);
   } else {
     cout << "Adding new image, num = " << num << endl;
-    addWeighted(aggImg, beta , input, alpha, 0.0, aggImg);
+    addWeighted(aggImg, beta , input, alpha, 0.0, aggImg, -1);
   }
 }
 
@@ -395,6 +396,17 @@ void drawingResponce(vector<vector<Mat> > &response) {
     cout << "These are the clusters: " << centers << endl;
 }
 
+/*************************** START Import images from Dir ****************************/
+// Check that file in dir is an accepted img type
+bool hasEnding(std::string const &fullString, std::string const &ending) {
+    if (fullString.length() >= ending.length()) {
+        return (0 == fullString.compare (fullString.length() - ending.length(), ending.length(), ending));
+    } else {
+        return false;
+    }
+}
+
+/*************************** END Import images from Dir ****************************/
 
 int main()
 {
@@ -410,16 +422,30 @@ int main()
     //plot filters
     drawing(edge, bar, rot, n_sigmas, n_orientations);
 
-    //apply filters to lena
-    Mat img = imread("../../Lena.png", IMREAD_GRAYSCALE);
-    cout << "This is lena size: " << img.size() << endl;
-    Mat imgFloat;
-    img.convertTo(imgFloat, CV_32FC1);
     vector<vector<Mat > > filterbank;
     filterbank.push_back(edge);
     filterbank.push_back(bar);
     filterbank.push_back(rot);
     vector<vector<Mat> > response;
+
+    //apply filters to lena
+    Mat img = imread("../../Lena.png", IMREAD_GRAYSCALE);
+    cout << "This is lena size: " << img.size() << endl;
+    equalizeHist(img, img);
+    cout << "image equalised" << endl;
+
+    // import images from dir
+    std::string extTypes[] = {".jpg", ".png", ".bmp"};
+    std::string dirNme = "../../savImgs/test/";
+    DIR *dir;
+    dir = opendir(dirNme.c_str());
+    string imgName;
+    struct dirent *ent;
+
+
+    Mat imgFloat;
+    img.convertTo(imgFloat, CV_32FC1);
+
 
     apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
     drawingResponce(response);
