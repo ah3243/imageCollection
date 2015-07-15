@@ -1,5 +1,6 @@
 #include <dirent.h>
-#include "iostream"
+#include <unistd.h> // For sleep function
+#include <iostream>
 #include <fstream>
 #include "vector"
 #include "set"
@@ -22,8 +23,11 @@ using namespace std;
 
 using namespace cv;
 
+
+
 typedef unsigned int uint;
 const float PI = 3.1415;
+int texDictSize = 40;
 
 //response = np.exp(-x ** 2 / (2. * sigma ** 2))
 void func1(float *response, float *lengths, float sigma, int size)
@@ -376,8 +380,8 @@ void drawingResponce(vector<vector<Mat> > &response, Mat &aggImg, double &alpha,
             Mat normalised;
             normaliseImage(response[type][imageIndex], normalised);
             imshow("normalisedImage", normalised);
-            waitKey();
             //saveImgs(imageIndex ,normalised);
+            usleep(5000);
             aggregateImg(counter, alpha, aggImg, normalised);
             alpha *= 0.5;
             cout << "This is the alpha:" << alpha << "coutner:" << counter << endl;
@@ -404,9 +408,125 @@ bool hasEnding(std::string const &fullString, std::string const &ending) {
 
 /*************************** END Import images from Dir ****************************/
 
+Mat loadImg(string imgpath){
+  Mat img = imread(imgpath, CV_LOAD_IMAGE_GRAYSCALE);
+  equalizeHist(img, img);
+
+  cout << "This is imgpath:" << imgpath << " img.size()" << img.size()  << endl;
+
+  Mat imgFloat;
+  img.convertTo(imgFloat, CV_32FC1);
+  return imgFloat;
+}
+
+void createTexDic(vector<vector<Mat> > &response, vector<vector<Mat> > &filterbank, int n_sigmas, int n_orientations, Mat aggImg, double (&textonDictArray)[40]){
+
+  // import images from dir
+  string extTypes[] = {".jpg", ".png", ".bmp"};
+  string classes[] = {"cotton/train/", "wood/train/", "cork/train/", "bread/train/"};
+  int classesSize = sizeof(classes)/sizeof(classes[0]);
+
+  int doCount = 0;
+  do{
+    stringstream dss;
+    string dirtmp = "../../../TEST_IMAGES/kth-tips/";
+    dss << dirtmp;
+    dss << classes[doCount];
+    string dirNme = dss.str();
+
+    cout << "this is the dir name: " << dirNme << endl;
+
+    DIR *dir;
+    dir = opendir(dirNme.c_str());
+
+    string imgName;
+    struct dirent *ent;
+
+    double alpha = 0.5;
+    int counter =0;
+
+    if(dir != NULL){
+      while ((ent = readdir(dir)) != NULL) {
+        imgName = ent->d_name;
+        if (hasEnding(imgName, ".png")) {
+          cout << "correct extension" << endl;
+
+          // Sort out string Stream
+          std::stringstream ss;
+          ss << dirNme << imgName;
+          std::string imgpath = ss.str();
+
+          Mat imgFloat = loadImg(imgpath);
+
+          apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
+          drawingResponce(response, aggImg, alpha, counter);
+          response.clear();
+        } else{
+          cout << "incorrect extension" << endl;
+        }
+      }
+    }
+
+    //cluster images
+    Mat centers = createSamples(aggImg);
+
+    cout << "These are the clusters: " << centers << endl;
+
+    // the number of values already in array
+    int start = doCount * 10;
+    for(int j =0;j<centers.rows;j++){
+      textonDictArray[j+start] = centers.at<float>(0, j);
+    }
+
+    FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
+    // if(doCount == 0){
+    // FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
+    // fs << "wood" << "[";
+    // fs << centers;
+    // fs << "]";
+    // } else {
+    // FileStorage fs("../textonDictionary.xml", FileStorage::APPEND);
+    // fs << "wood" << "[";
+    // fs << centers;
+    // fs << "]";
+    // }
+
+    fs.release();
+    doCount ++;
+  }while(doCount < classesSize);
+  classesSize = sizeof(textonDictArray)/sizeof(textonDictArray[0]);
+  cout << "This is the full texton Dictionary size:" << classesSize << endl;
+  for(int i = 0;i < classesSize;i++){
+    cout << i << ":" << textonDictArray[i]<< endl;
+  }
+  waitKey();
+}
+
+void createModels(vector<vector<Mat> > &response, vector<vector<Mat> > &filterbank, int n_sigmas, int n_orientations, Mat aggImg, double (&texDict)[40]){
+  double alpha =0.5;
+  int counter =0;
+
+  string path;
+  stringstream ss;
+  cout << "please enter the directory(excluding the .png extension) of your file assuming the path:\n../../../TEST_IMAGES/kth-tips/" << endl;
+  cin >> path;
+  ss << "../../../TEST_IMAGES/kth-tips/" << path << ".png";
+  cout << "This is your path: \n" << ss.str();
+
+  Mat img = loadImg(ss.str());
+
+  apply_filterbank(img, filterbank, response, n_sigmas, n_orientations);
+  drawingResponce(response, aggImg, alpha, counter);
+  Mat centers = createSamples(aggImg);
+  cout << "These are the cluster centers" << centers << endl;
+  cout << "This is the current texton dictionary no 15: " << endl;
+}
+
 int main()
 {
     Mat aggImg;
+
+    double textonDictionary[40];
 
     vector<float> sigmas;
     sigmas.push_back(1);
@@ -426,63 +546,35 @@ int main()
     filterbank.push_back(rot);
 
     vector<vector<Mat> > response;
+    bool cont;
+    do{
+      cout << "\nMenu: Please enter the chosen options number \n"<< endl;
+      cout << "1: texton dictionary creation" << endl;
+      cout << "2: model creation" << endl;
+      cout << "3: model testing" << endl;
+      cout << "4: exit\n" << endl;
 
-    //apply filters to lena
-    // Mat img = imread("../../Lena.png", IMREAD_GRAYSCALE);
-    // cout << "This is lena size: " << img.size() << endl;
-    // cout << "image equalised" << endl;
+      string tmp;
+      cin >> tmp;
 
-    // import images from dir
-    std::string extTypes[] = {".jpg", ".png", ".bmp"};
-    std::string dirNme = "../../../TEST_IMAGES/kth-tips/bread/train/";
-
-    DIR *dir;
-    dir = opendir(dirNme.c_str());
-    string imgName;
-    struct dirent *ent;
-
-    double alpha = 0.5;
-    int counter =0;
-
-    if(dir != NULL){
-      while ((ent = readdir(dir)) != NULL) {
-        imgName = ent->d_name;
-        if (hasEnding(imgName, ".png")) {
-          cout << "correct extension" << endl;
-
-          // Sort out string Stream
-          std::stringstream ss;
-          ss << dirNme << imgName;
-          std::string imgpath = ss.str();
-
-          Mat img = imread(imgpath, CV_LOAD_IMAGE_GRAYSCALE);
-          equalizeHist(img, img);
-
-          cout << "This is imgpath:" << imgpath << " img.size()" << img.size()  << endl;
-          imshow("hello", img);
-          waitKey();
-
-          Mat imgFloat;
-          img.convertTo(imgFloat, CV_32FC1);
-
-          apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
-          drawingResponce(response, aggImg, alpha, counter);
-          response.clear();
-          img.release();
-          imgFloat.release();
-        } else{
-          cout << "incorrect extension" << endl;
-        }
+      if(tmp == "1"){
+        cout << "creating texton dictionary" << endl;
+        createTexDic(response, filterbank, n_sigmas, n_orientations, aggImg, textonDictionary);
+        cont = true;
+      } else if(tmp == "2"){
+        cout << "Creating models" << endl;
+        createModels(response, filterbank, n_sigmas, n_orientations,aggImg, textonDictionary);
+        cont = true;
+      } else if(tmp == "3"){
+        cout << "Entering test mode" << endl;
+        cont = true;
+      } else if(tmp == "4"){
+        cout << "exiting" << endl;
+        cont = false;
+      } else {
+        cout << "that input was not recognised." << endl;
+        cont = true;
       }
-    }
+    }while(cont);
 
-    //cluster images
-    Mat centers = createSamples(aggImg);
-
-    cout << "These are the clusters: " << centers << endl;
-    FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
-    fs << "cluster" << centers;
-    fs.release();
-
-    waitKey(0);
 }
