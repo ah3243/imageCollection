@@ -17,6 +17,7 @@
 #include <algorithm>
 using namespace std;
 #include "opencv2/opencv.hpp"
+#include <typeinfo>
 //#include "opencv2/face.hpp"
 
 using namespace cv;
@@ -304,7 +305,7 @@ void  apply_filterbank(Mat &img,
 
     }
 
-cout <<"leaving apply filtebank" << endl;
+cout <<"leaving apply filterbank" << endl;
 }
 
 void normaliseImage(Mat& image, Mat& normalised)
@@ -325,12 +326,12 @@ void normaliseImage(Mat& image, Mat& normalised)
     }
 }
 
-/************************* Mine **********************************/
-// Aggregate Images
+// Save to image dir
 void saveImgs(uint num, Mat image) {
     imwrite("images/imageNo1.png", image);
 }
 
+// Aggregate Images
 void aggregateImg(uint num, double alpha, Mat &aggImg, Mat input) {
   double beta = 1.0 - alpha;
   if (num == 0) {
@@ -342,21 +343,19 @@ void aggregateImg(uint num, double alpha, Mat &aggImg, Mat input) {
   }
 }
 
-// Cluster images
+// Apply kmeans, rtn centers
 Mat applyKmeans(Mat samples){
   int clusterCount = 10, attempts = 5;
   Mat  labels, centers;
   cout << "apply kmeans, this is size: " << labels.size() << "centres" << centers.size() << endl;
-  //cout << "sample is this size: " << samples;
-
+    cout << "apply kmeans, this is the input mat size: " << samples.size() << endl;
   // Apply KMeans
   kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers);
   return centers;
 }
 
+// convert 2d Mat to 1Col float mat, Pass to kmeans
 Mat createSamples(Mat input){
-    cout << "Create samples these are the samples before imshow" << input ;
-
     input.convertTo(input, CV_32F);
     Mat samples(input.rows * input.cols, 1, CV_32F);
 
@@ -368,45 +367,49 @@ Mat createSamples(Mat input){
     }
     return applyKmeans(samples);
 }
-/************************* End **********************************/
 
-void drawingResponce(vector<vector<Mat> > &response, Mat &aggImg, int &counter){
-//    int numInRow = response[0].size();
-//    int support = response[0][0].cols;
-//    Mat responceShow = Mat::zeros((1.5 * numInRow + 1) * support, (1.5 * numInRow + 1) * support, CV_8UC1);
-//    rectangle(responceShow, Rect(0,0, responceShow.cols, responceShow.rows), Scalar(125), -1);
+// converts input 1d Mat to vector
+void matToVec(vector<float> &textonDict, Mat centers){
+  for(int j = 0;j < centers.rows;j++){
+    textonDict.push_back(centers.at<float>(0, j));
+  }
+}
+
+// produce Agg image from responses
+void drawingResponce(vector<vector<Mat> > &response, vector<vector<float> > &models, int &counter, int flag, Mat &aggImg, int doCount){
     double alpha = 0.5;
 
     for(uint type = 0; type < response.size(); type++)
     {
-      cout << "This is the response size:" << response.size() << endl;
         for(uint imageIndex = 0; imageIndex < response[type].size(); imageIndex++)
         {
           cout << "This is the response[type].size:" << response[type].size() << "Type: " << type << endl;
 
-          //  Mat normalised;
-          //  normaliseImage(response[type][imageIndex], normalised);
-            // imshow("normalisedImage", normalised);
-            //saveImgs(imageIndex ,normalised);
-
+          if(flag){
+            cout << "\n\n\n\n the flag is this: " << flag << endl;
+            // Aggregate for Texton Dictionary
             aggregateImg(counter, alpha, aggImg, response[type][imageIndex]);
             alpha *= 0.5;
-
-            cout << "aggrgate image taking shape: " << endl;
-
-
-
-            // cout << "This is the alpha:" << alpha << "coutner:" << counter << endl;
-            // normalised.copyTo(responceShow(Rect((1.5*imageIndex + 0.5) * support, (1.5*type + 0.5) * support, support,support)));
-            // counter++;
+          }
+          else {
+            // cluster and save to vector
+            Mat clusters = createSamples(response[type][imageIndex]);
+            cout << "\n\n\nThese " << type << " " << imageIndex << " from: " << doCount << "are clusters from inside drawingResponce: \n" << clusters << endl;
+            matToVec(models[0], clusters);
+          }
         }
     }
-    // resize(responceShow, responceShow, Size(responceShow.cols/8, responceShow.rows/8));
-    //
-    // imshow("responceShow", responceShow);
 }
 
-/*************************** START Import images from Dir ****************************/
+// Print Texton Dictionary
+void printTexDict(vector<float> textonDict){
+  int classesSize = textonDict.size();
+  cout << "This is the full texton Dictionary size:" << classesSize << endl;
+  for(int i = 0;i < classesSize;i++){
+    cout << i << ":" << textonDict.at(i)<< endl;
+  }
+}
+
 // Check that file in dir is an accepted img type
 bool hasEnding(std::string const &fullString, std::string const &ending) {
     if (fullString.length() >= ending.length()) {
@@ -415,47 +418,38 @@ bool hasEnding(std::string const &fullString, std::string const &ending) {
         return false;
     }
 }
-
-/*************************** END Import images from Dir ****************************/
-
+// Load and Equalise Imgs from path, rtn img float
 Mat loadImg(string imgpath){
   Mat img = imread(imgpath, CV_LOAD_IMAGE_GRAYSCALE);
   equalizeHist(img, img);
 
   cout << "This is imgpath:" << imgpath << " img.size()" << img.size()  << endl;
-
   Mat imgFloat;
   img.convertTo(imgFloat, CV_32FC1);
   return imgFloat;
 }
 
-void printTexDict(double (&textonDictArray)[40]){
-  int classesSize = sizeof(textonDictArray)/sizeof(textonDictArray[0]);
-  cout << "This is the full texton Dictionary size:" << classesSize << endl;
-  for(int i = 0;i < classesSize;i++){
-    cout << i << ":" << textonDictArray[i]<< endl;
-  }
-}
-
-void createTexDic(vector<vector<Mat> > &filterbank, int n_sigmas, int n_orientations, double (&textonDictArray)[40]){
-
-
+// Generate Texton Dictionary from all imgs in sub dirs
+void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& models, int n_sigmas, int n_orientations, vector<float>& textonDict, string type){
   // import images from dir
-  string extTypes[] = {".jpg", ".png", ".bmp"};
-  string classes[] = {"cotton/train/", "wood/train/", "cork/train/", "bread/train/"};
-  int classesSize = sizeof(classes)/sizeof(classes[0]);
+  string textonclasses[] = {"cotton/", "wood/", "cork/", "bread/"};
+  vector<string> classes (textonclasses, textonclasses + sizeof(textonclasses)/sizeof(textonclasses[0]));
 
+  string extTypes[] = {".jpg", ".png", ".bmp"};
+  int classesSize = classes.size();
   int doCount = 0;
+
   do{
+    string classnme = classes.at(doCount);
 
     stringstream dss;
     string dirtmp = "../../../TEST_IMAGES/kth-tips/";
     dss << dirtmp;
-    dss << classes[doCount];
+    dss << classnme;
+    dss << type;
     string dirNme = dss.str();
 
     cout << "this is the dir name: " << dirNme << endl;
-
     DIR *dir;
     dir = opendir(dirNme.c_str());
 
@@ -468,6 +462,7 @@ void createTexDic(vector<vector<Mat> > &filterbank, int n_sigmas, int n_orientat
       Mat aggImg;
       vector<vector<Mat> > response;
 
+      int imagecounter =0;
       while ((ent = readdir(dir)) != NULL) {
         imgName = ent->d_name;
 
@@ -479,52 +474,54 @@ void createTexDic(vector<vector<Mat> > &filterbank, int n_sigmas, int n_orientat
           ss << dirNme << imgName;
           std::string imgpath = ss.str();
 
+          // Load image
           Mat imgFloat = loadImg(imgpath);
 
+          // Apply and store in response
           apply_filterbank(imgFloat, filterbank, response, n_sigmas, n_orientations);
+
+          // If type is test cluster each image
+          if(type.compare("test/")==0){
+            cout << "\n\n\n\n\n Going in again.." << imagecounter << "         " << doCount <<" \n\n\n\n\n";
+            drawingResponce(response, models,counter, 0, aggImg, doCount);
+            waitKey(100);
+            response.clear();
+          }
+
         } else{
           cout << "incorrect extension:" << imgName << "LL" << endl;
         }
+      imagecounter++;
       }
-      drawingResponce(response, aggImg, counter);
-      cout << "This is your agg img" << endl;
-      imshow("agg image", aggImg);
-      cvDestroyWindow("agg image");
-      waitKey();
 
-      //cluster images
-      Mat centers = createSamples(aggImg);
-
-      cout << "These are the clusters: " << centers << endl;
-
-      // the number of values already in array
-      int start = doCount * 10;
-      for(int j =0;j<centers.rows;j++){
-        textonDictArray[j+start] = centers.at<float>(0, j);
+      // If type is train aggregate and generate clusters
+      if(type.compare("train/")==0){
+        // Aggregate fitler responses from the same classes
+        drawingResponce(response, models, counter, 1,aggImg, doCount);
+        Mat centers = createSamples(aggImg);
+        //cluster aggregated response
+        cout << "These are the clusters: " << centers << endl;
+        // Store kmeans cluster centers(textons) in vector referenced from main//
+        // the number of values already in array
+        matToVec(textonDict, centers);
       }
+
     }
 
-    FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
-    // if(doCount == 0){
     // FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
     // fs << "wood" << "[";
     // fs << centers;
     // fs << "]";
-    // } else {
-    // FileStorage fs("../textonDictionary.xml", FileStorage::APPEND);
-    // fs << "wood" << "[";
-    // fs << centers;
-    // fs << "]";
-    // }
-
-    fs.release();
+    // fs.release();
+    cout << "\n\n\n\nClass size:" << classesSize << endl;
     doCount ++;
   }while(doCount < classesSize);
-  printTexDict(textonDictArray);
-
+  // Print Current referenced texton dictionary
+  printTexDict(textonDict);
 }
 
-void createModels(vector<vector<Mat> > filterbank, int n_sigmas, int n_orientations, double (&texDict)[40]){
+// Generate models from training images
+void createModels(vector<vector<Mat> > filterbank, int n_sigmas, int n_orientations, vector<float>& texDict){
   Mat aggImg;
   double alpha =0.5;
   int counter =0;
@@ -541,17 +538,19 @@ void createModels(vector<vector<Mat> > filterbank, int n_sigmas, int n_orientati
   cout << "Mat size.." << img.size();
 
   apply_filterbank(img, filterbank, response, n_sigmas, n_orientations);
-  drawingResponce(response, aggImg, counter);
+  //drawingResponce(response, counter, aggImg);
+
   Mat centers = createSamples(aggImg);
-  cout << "These are the cluster centers" << centers << endl;
-  cout << "This is the current texton dictionary no 15: " << endl;
+   cout << "These are the cluster centers" << centers << endl;
+
   response.clear();
 }
 
 int main()
 {
-
-    double textonDictionary[40];
+    vector<vector<float> > models(4,vector<float>(1,0));
+    vector<float> textonDictionary;
+    const string type[] = {"train/", "test/"};
 
     vector<float> sigmas;
     sigmas.push_back(1);
@@ -584,15 +583,17 @@ int main()
 
       if(tmp == "1"){
         cout << "creating texton dictionary" << endl;
-        createTexDic(filterbank, n_sigmas, n_orientations, textonDictionary);
-        sort(textonDictionary, textonDictionary+40);
+        createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[0]);
+        sort(textonDictionary.begin(), textonDictionary.end());
         cout << "printing texton dictionary from main" << endl;
         printTexDict(textonDictionary);
         cont = true;
       } else if(tmp == "2"){
         cout << "Creating models" << endl;
+        createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
+        sort(textonDictionary.begin(), textonDictionary.end());
         printTexDict(textonDictionary);
-        createModels(filterbank, n_sigmas, n_orientations, textonDictionary);
+        //createModels(filterbank, n_sigmas, n_orientations, textonDictionary);
         cont = true;
       } else if(tmp == "3"){
         cout << "Entering test mode" << endl;
@@ -606,5 +607,4 @@ int main()
         cont = true;
       }
     }while(cont);
-
 }
