@@ -344,8 +344,8 @@ void aggregateImg(uint num, double alpha, Mat &aggImg, Mat input) {
 }
 
 // Apply kmeans, rtn centers
-Mat applyKmeans(Mat samples){
-  int clusterCount = 10, attempts = 5;
+Mat applyKmeans(Mat samples, int clusterCount){
+  int  attempts = 5;
   Mat  labels, centers;
   cout << "apply kmeans, this is size: " << labels.size() << "centres" << centers.size() << endl;
     cout << "apply kmeans, this is the input mat size: " << samples.size() << endl;
@@ -355,7 +355,7 @@ Mat applyKmeans(Mat samples){
 }
 
 // convert 2d Mat to 1Col float mat, Pass to kmeans
-Mat createSamples(Mat input){
+Mat createSamples(Mat input, int cluster){
     input.convertTo(input, CV_32F);
     Mat samples(input.rows * input.cols, 1, CV_32F);
 
@@ -365,7 +365,7 @@ Mat createSamples(Mat input){
         samples.at<float>(y, x) = input.at<float>(y, x);
       }
     }
-    return applyKmeans(samples);
+    return applyKmeans(samples, cluster);
 }
 
 // converts input 1d Mat to vector
@@ -386,18 +386,18 @@ void drawingResponce(vector<vector<Mat> > &response, vector<vector<float> > &mod
           cout << "This is the response[type].size:" << response[type].size() << "Type: " << type << endl;
 
           if(flag){
-            cout << "\n\n\n\n the flag is this: " << flag << endl;
             // Aggregate for Texton Dictionary
             aggregateImg(counter, alpha, aggImg, response[type][imageIndex]);
             alpha *= 0.5;
           }
           else {
             // cluster and save to vector
-            Mat clusters = createSamples(response[type][imageIndex]);
+            Mat clusters = createSamples(response[type][imageIndex], 1);
             cout << "\n\n\nThese " << type << " " << imageIndex << " from: " << doCount << "are clusters from inside drawingResponce: \n" << clusters << endl;
-            matToVec(models[0], clusters);
+            matToVec(models[doCount], clusters);
           }
         }
+
     }
 }
 
@@ -410,6 +410,16 @@ void printTexDict(vector<float> textonDict){
   }
 }
 
+void printModels(vector<vector<float> > v){
+  cout << "Below are the model cluster centers" << endl;
+    for(int i = 0;i<v.size();i++){
+      for(int j = 0;j<v[i].size();j++){
+        cout << v[i][j] << " ";
+      }
+      cout << "\n\n" << endl;
+    }
+}
+
 // Check that file in dir is an accepted img type
 bool hasEnding(std::string const &fullString, std::string const &ending) {
     if (fullString.length() >= ending.length()) {
@@ -418,6 +428,7 @@ bool hasEnding(std::string const &fullString, std::string const &ending) {
         return false;
     }
 }
+
 // Load and Equalise Imgs from path, rtn img float
 Mat loadImg(string imgpath){
   Mat img = imread(imgpath, CV_LOAD_IMAGE_GRAYSCALE);
@@ -427,6 +438,25 @@ Mat loadImg(string imgpath){
   Mat imgFloat;
   img.convertTo(imgFloat, CV_32FC1);
   return imgFloat;
+}
+
+void roundModel(vector<vector<float> >& v){
+  for(int i=0;i<v.size();i++){
+    for(int j=0;j<v[i].size();j++){
+      v[i][j] = floorf(v[i][j]*100)/100;
+    }
+  }
+}
+
+// Generate models from training images
+void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models, int counter, int doCount){
+  Mat aggImg;
+
+  drawingResponce(response, models,counter, 0, aggImg, doCount);
+  roundModel(models);
+
+  waitKey(100);
+  response.clear();
 }
 
 // Generate Texton Dictionary from all imgs in sub dirs
@@ -482,10 +512,7 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& mode
 
           // If type is test cluster each image
           if(type.compare("test/")==0){
-            cout << "\n\n\n\n\n Going in again.." << imagecounter << "         " << doCount <<" \n\n\n\n\n";
-            drawingResponce(response, models,counter, 0, aggImg, doCount);
-            waitKey(100);
-            response.clear();
+            createModels(response, models, counter, doCount);
           }
 
         } else{
@@ -498,7 +525,7 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& mode
       if(type.compare("train/")==0){
         // Aggregate fitler responses from the same classes
         drawingResponce(response, models, counter, 1,aggImg, doCount);
-        Mat centers = createSamples(aggImg);
+        Mat centers = createSamples(aggImg, 10);
         //cluster aggregated response
         cout << "These are the clusters: " << centers << endl;
         // Store kmeans cluster centers(textons) in vector referenced from main//
@@ -513,37 +540,11 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& mode
     // fs << centers;
     // fs << "]";
     // fs.release();
-    cout << "\n\n\n\nClass size:" << classesSize << endl;
+
     doCount ++;
   }while(doCount < classesSize);
   // Print Current referenced texton dictionary
   printTexDict(textonDict);
-}
-
-// Generate models from training images
-void createModels(vector<vector<Mat> > filterbank, int n_sigmas, int n_orientations, vector<float>& texDict){
-  Mat aggImg;
-  double alpha =0.5;
-  int counter =0;
-  vector<vector<Mat> > response;
-
-  string path;
-  stringstream ss;
-  cout << "please enter the directory(excluding the .png extension) of your file assuming the path:\n../../../TEST_IMAGES/kth-tips/" << endl;
-  //cin >> path;
-  ss << "../../../TEST_IMAGES/kth-tips/bread/train/" << "52a-scale_2_im_1_col" << ".png";
-  cout << "This is your path: \n" << ss.str();
-
-  Mat img = loadImg(ss.str());
-  cout << "Mat size.." << img.size();
-
-  apply_filterbank(img, filterbank, response, n_sigmas, n_orientations);
-  //drawingResponce(response, counter, aggImg);
-
-  Mat centers = createSamples(aggImg);
-   cout << "These are the cluster centers" << centers << endl;
-
-  response.clear();
 }
 
 int main()
@@ -591,6 +592,8 @@ int main()
       } else if(tmp == "2"){
         cout << "Creating models" << endl;
         createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
+        roundModel(models);
+        printModels(models);
         sort(textonDictionary.begin(), textonDictionary.end());
         printTexDict(textonDictionary);
         //createModels(filterbank, n_sigmas, n_orientations, textonDictionary);
