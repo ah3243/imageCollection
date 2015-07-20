@@ -2,14 +2,12 @@
 #include <unistd.h> // For sleep function
 #include <iostream>
 #include <fstream>
-#include "vector"
 #include "set"
 #include "stack"
 #include <iostream>
 #include "stdio.h"
 #include "string"
 #include "vector"
-#include "stack"
 #include "queue"
 #include "map"
 #include "math.h"
@@ -18,7 +16,9 @@
 using namespace std;
 #include "opencv2/opencv.hpp"
 #include <typeinfo>
-//#include "opencv2/face.hpp"
+#include <chrono>  // time measurement
+#include <thread>  // time measurement
+#include <boost/math/special_functions/round.hpp>
 
 using namespace cv;
 
@@ -392,12 +392,11 @@ void drawingResponce(vector<vector<Mat> > &response, vector<vector<float> > &mod
           }
           else {
             // cluster and save to vector
-            Mat clusters = createSamples(response[type][imageIndex], 1);
+            Mat clusters = createSamples(response[type][imageIndex], 10);
             cout << "\n\n\nThese " << type << " " << imageIndex << " from: " << doCount << "are clusters from inside drawingResponce: \n" << clusters << endl;
             matToVec(models[doCount], clusters);
           }
         }
-
     }
 }
 
@@ -413,10 +412,11 @@ void printTexDict(vector<float> textonDict){
 void printModels(vector<vector<float> > v){
   cout << "Below are the model cluster centers" << endl;
     for(int i = 0;i<v.size();i++){
+      cout << "model " << i << ":" << endl;
       for(int j = 0;j<v[i].size();j++){
-        cout << v[i][j] << " ";
+          cout << v[i][j] << " ";
       }
-      cout << "\n\n" << endl;
+      cout << "\n\n"<< endl;
     }
 }
 
@@ -432,6 +432,9 @@ bool hasEnding(std::string const &fullString, std::string const &ending) {
 // Load and Equalise Imgs from path, rtn img float
 Mat loadImg(string imgpath){
   Mat img = imread(imgpath, CV_LOAD_IMAGE_GRAYSCALE);
+  if(!img.data){
+    return img;
+  }
   equalizeHist(img, img);
 
   cout << "This is imgpath:" << imgpath << " img.size()" << img.size()  << endl;
@@ -460,7 +463,7 @@ void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models
 }
 
 // Generate Texton Dictionary from all imgs in sub dirs
-void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& models, int n_sigmas, int n_orientations, vector<float>& textonDict, string type){
+void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<vector<float> > >& models, int n_sigmas, int n_orientations, vector<float>& textonDict, string type){
   // import images from dir
   string textonclasses[] = {"cotton/", "wood/", "cork/", "bread/"};
   vector<string> classes (textonclasses, textonclasses + sizeof(textonclasses)/sizeof(textonclasses[0]));
@@ -512,7 +515,7 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& mode
 
           // If type is test cluster each image
           if(type.compare("test/")==0){
-            createModels(response, models, counter, doCount);
+            createModels(response, models[doCount], counter, doCount);
           }
 
         } else{
@@ -524,7 +527,7 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& mode
       // If type is train aggregate and generate clusters
       if(type.compare("train/")==0){
         // Aggregate fitler responses from the same classes
-        drawingResponce(response, models, counter, 1,aggImg, doCount);
+        drawingResponce(response, models[doCount], counter, 1,aggImg, doCount);
         Mat centers = createSamples(aggImg, 10);
         //cluster aggregated response
         cout << "These are the clusters: " << centers << endl;
@@ -547,9 +550,79 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<float> >& mode
   printTexDict(textonDict);
 }
 
+
+void histoGram(vector<vector<float> >& models){
+  cout << "Models .size:" << models.size() << endl;
+  Mat intModel(100,100, CV_8UC1);
+
+  for(int i=0;i<models.size();i++){
+    for(int j=0;j<models[i].size();j++){
+      if(!models[i].empty()){
+        cout << "round 1.." << models[i].at(j) << endl;
+        intModel.at<int>(i,j) = boost::math::iround(models[i].at(j));
+      }
+    }
+  }
+}
+
+
+void roundTex(vector<float>& tex){
+  for(int i=0;i<tex.size();i++){
+      // tex[i] = floorf((tex[i])*100)/100;
+      tex[i] = round(tex[i]);
+  }
+}
+
+// Calculate and return histogram
+Mat showHist(Mat& test1, Mat& histImage, int histSize){
+  // // Draw the histograms for B, G and R
+  int hist_w = 512; int hist_h = 400;
+  int bin_w = cvRound( (double) hist_w/histSize );
+  Mat m( hist_h, hist_w, CV_8UC1, Scalar( 0) );
+
+  cout << "\n";
+  /// Draw for each channel
+  for( int i = 1; i < histSize; i++ )
+  {
+    cout << "result " << i << ": " << test1.at<float>(i) << endl;
+
+       rectangle( histImage, Point( bin_w*(i),  hist_h) ,
+                        Point( (bin_w*(i))+bin_w,  hist_h - test1.at<float>(i)),
+                        Scalar( 255, 255, 255),-1, 8);
+  }
+  return m;
+}
+
+Mat createHist(Mat& test, Mat& histImage){
+  /// Establish the number of bins
+  int histSize = 20;
+
+  /// Set the ranges ( for B,G,R) )
+  float range[] = { 0, 200 } ;
+  const float* histRange = { range };
+
+  bool uniform = true; bool accumulate = false;
+
+  int h = 200, w = 200;
+  int total = (h*w)*100;
+  Mat test1 = Mat::zeros(h,w,CV_32FC1);
+
+  /// Compute the histograms:
+  calcHist( &test, 1, 0, Mat(), test1, 1, &histSize, &histRange, uniform, accumulate );
+
+  return showHist(test1, histImage, histSize);
+}
+
+void textToMat(Mat& tmp, vector<float> texDict){
+
+    for(int i = 0; i < texDict.size();i++){
+        tmp.at<float>(i) = texDict.at(i);
+    }
+}
+
 int main()
 {
-    vector<vector<float> > models(4,vector<float>(1,0));
+    vector<vector<vector<float> > > models(4,vector<vector<float> >(8,vector<float>(0)));
     vector<float> textonDictionary;
     const string type[] = {"train/", "test/"};
 
@@ -570,7 +643,6 @@ int main()
     filterbank.push_back(bar);
     filterbank.push_back(rot);
 
-
     bool cont;
     do{
       cout << "\nMenu: Please enter the chosen options number \n"<< endl;
@@ -584,20 +656,54 @@ int main()
 
       if(tmp == "1"){
         cout << "creating texton dictionary" << endl;
+
+        // Create texton dict and store
         createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[0]);
+
+        // Sort texton Dict and round to 2dp
         sort(textonDictionary.begin(), textonDictionary.end());
+        roundTex(textonDictionary);
+
+        // Print texton dict to console
         cout << "printing texton dictionary from main" << endl;
         printTexDict(textonDictionary);
+
+        // Convert array to Mat
+        Mat tmp(250, 250, CV_32FC1);
+        textToMat(tmp, textonDictionary);
+
+        // Generate texton histogram and return Mat image and display
+        Mat histImage = createHist(tmp, histImage);
+        imshow("texton Histogram",histImage);
+        waitKey(1000);
+
         cont = true;
       } else if(tmp == "2"){
-        cout << "Creating models" << endl;
-        createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
-        roundModel(models);
-        printModels(models);
-        sort(textonDictionary.begin(), textonDictionary.end());
-        printTexDict(textonDictionary);
-        //createModels(filterbank, n_sigmas, n_orientations, textonDictionary);
-        cont = true;
+        if(textonDictionary.empty()){
+          cout << "Creating models" << endl;
+
+          // Measure start time
+          auto t1 = std::chrono::high_resolution_clock::now();
+
+          createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
+          for(int i=0;i<models.size();i++){
+            roundModel(models[i]);
+            printModels(models[i]);
+            histoGram(models[i]);
+          }
+
+          // Measure time efficiency
+          auto t2 = std::chrono::high_resolution_clock::now();
+          std::cout << "f() took "
+                    << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
+                    << " milliseconds\n";
+          cont = true;
+        }
+        else{
+          cout << "\nYou must create the texton library before model creation." << endl;
+          waitKey();
+        }
+
       } else if(tmp == "3"){
         cout << "Entering test mode" << endl;
         cont = true;
