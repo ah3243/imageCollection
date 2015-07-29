@@ -376,19 +376,16 @@ void matToVec(vector<float> &textonDict, Mat centers){
 }
 
 void drawingResponceInner(vector<Mat>& response, vector<vector<float> > &models, int &counter, int flag, Mat &aggImg, uint type, double& alpha){
-  for(uint imageIndex = 0; imageIndex < response.size(); imageIndex++)
-  {
+  for(uint imageIndex = 0; imageIndex < response.size(); imageIndex++){
     if(flag){
       // Aggregate for Texton Dictionary
       aggregateImg(counter, alpha, aggImg, response[imageIndex]);
       alpha *= 0.5;
-    }
-    else {
+    }else {
       cout << "\ndrawing Response model:" << type << " : " << imageIndex << endl;
       // cluster and save to models
       Mat clusters = createSamples(response[imageIndex], 10);
-      cout << "This is the centres size! " << clusters.size() << endl;
-      matToVec(models[(type*3)+imageIndex], clusters);
+      matToVec(models[counter], clusters);
     }
   }
 }
@@ -442,17 +439,19 @@ bool loadImg(Mat& img){
   return true;
 }
 
-void roundModelInner(vector<float>& v){
-  for(int j=0;j<v.size();j++){
-    v[j] = floorf(v[j]*1000)/1000;
+// Round to 3dp
+  //inner loop
+  void roundModelInner(vector<float>& v){
+    for(int j=0;j<v.size();j++){
+      v[j] = floorf(v[j]*1000)/1000;
+    }
   }
-}
-
-void roundModel(vector<vector<float> >& v){
-  for(int i=0;i<v.size();i++){
-    roundModelInner(v[i]);
+  // outerloop
+  void roundModel(vector<vector<float> >& v){
+    for(int i=0;i<v.size();i++){
+      roundModelInner(v[i]);
+    }
   }
-}
 
 // Generate models from training images
 void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models, int counter){
@@ -461,7 +460,7 @@ void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models
   drawingResponce(response, models,counter, 0, aggImg);
   roundModel(models);
 
-  waitKey(100);
+  waitKey(1000);
   response.clear();
 }
 
@@ -668,6 +667,7 @@ void textonFind(vector<float> txtDict, float& m){
       distance = abs(txtDict[i] - m);
     }
   }
+  m = nearest;
 }
 
 void textonModel(vector<float> txtDict, vector<float>& models){
@@ -689,7 +689,6 @@ void binLimits(vector<float> texDict, float* bins, int size){
 }
 
 void allocate3dvect(vector<vector<Mat> >& in, int height, int width){
-
   for(int i = 0;i < height;i++){
     in.push_back(vector<Mat>());
     for(int j = 0;j < width;j++){
@@ -806,15 +805,15 @@ int main()
 
             // loop through different models
             for(int b = 0; b < models[a].size() && models[a][0].size() != 0; b++){
-            cout << "This is the size before if: " << models[a][0].size() << endl;
+  //          cout << "This is the size before if: " << models[a][0].size() << endl;
               if(models[a][b].size()!=0){
                 cout << "starting this loop: " << a << " mini loop number: " << b << endl;
-
-                cout << "this is the models[a].size().. " << models[a].size() << endl;
-
-  //              textonModel(textonDictionary, models[a][b]);
+                cout << "\n\nbefore textonModel.." << endl;
                 printModels(models[a]);
-
+                textonModel(textonDictionary, models[a][b]);
+                cout << "after textonModels.. \n\n\n";
+                printModels(models[a]);
+                cout << "done printing.." << endl;
                 // Convert array to Mat
                 Mat tmp(120, 120, CV_32FC1);
                 textToMat(tmp, models[a][b]);
@@ -846,7 +845,6 @@ int main()
           cout << "\nYou must create the texton library before model creation." << endl;
           waitKey(1000);
         }
-
       }
 
       // --------------------- Test Novel Image ---------------------- //
