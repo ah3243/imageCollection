@@ -418,7 +418,7 @@ void printModels(vector <vector<float> > v){
       for(int i = 0; i < v[b].size(); i++){
           cout << v[b][i] << " ";
       }
-      cout << "\n\n"<< endl;
+      cout << "\n";
     }
 }
 
@@ -580,8 +580,8 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<vector<float> 
 
 void roundTex(vector<float>& tex){
   for(int i=0;i<tex.size();i++){
-      // tex[i] = floorf((tex[i])*100)/100;
-      tex[i] = round(tex[i]);
+      tex[i] = floorf((tex[i])*1000)/1000;
+      //tex[i] = round(tex[i]);
   }
 }
 
@@ -600,26 +600,41 @@ void removeDups(vector<float>& tex){
     tex.assign(v.begin(), v.end());
 }
 
+int maxHistVal(Mat in){
+  int maxVal = 0;
+
+  // Started at 1 to avoid first very high value..
+  for(int i = 1; i < in.rows;i++){
+    for(int j = 0; j < in.cols;j++){
+      if(in.at<float>(i,j)>maxVal){
+        maxVal = in.at<float>(i,j);
+      }
+    }
+  }
+  return maxVal;
+}
+
 // Calculate and return histogram image
-Mat showHist(Mat& test1, Mat& histImage, int histSize){
-  // Draw the histograms
+Mat showHist(Mat& inputHist, int histBins){
+  // Create variables
   int hist_w = 512; int hist_h = 400;
-  int bin_w = cvRound( (double) hist_w/histSize );
+  int bin_w = cvRound( (double) hist_w/histBins );
+  int maxVal = maxHistVal(inputHist);
+
+  // Calibrate the maximum histogram value at 80% of window height
+  double scaleFactor = ((hist_h*0.8)/maxVal);
+
   Mat m( hist_h, hist_w, CV_8UC1, Scalar( 0) );
-
-  cout << "\n";
-  // Draw for each channel
-
   int countHist = 0;
-  for( int i = 1; i < histSize; i++ )
-  {
-    countHist += test1.at<float>(i);
-//    cout << "result " << i << ": " << test1.at<float>(i) << " CountHist: " << countHist << endl;
-    rectangle( histImage, Point( bin_w*(i),  hist_h) ,
-                    Point( (bin_w*(i))+bin_w,  hist_h - test1.at<float>(i)),
+  for( int i = 1; i < histBins; i++ ){
+    // Count sum of histogram values
+    countHist += inputHist.at<float>(i);
+
+    // Draw rectangle representative of hist values in output image
+    rectangle( m, Point( bin_w*(i),  hist_h) ,
+                    Point( (bin_w*(i))+bin_w,  hist_h - (inputHist.at<float>(i) * scaleFactor)),
                     Scalar( 255, 255, 255),-1, 8);
   }
-  cout << "The aggregated hist number is: " << countHist << endl;
   return m;
 }
 
@@ -629,12 +644,9 @@ Mat createHist(Mat& in, int histSize, const float* histRange, bool uniform){
   int h = 600, w = 450;
   int total = (h*w)*100;
   Mat output = Mat::zeros(h,w,CV_32FC1);
-  // cout << "after range thing.. histRange[0][1]" << histRange[0] << "" << histRange[1] << endl;
 
   // Compute the histograms:
   calcHist( &in, 1, 0, Mat(), output, 1, &histSize, &histRange, uniform, accumulate );
-  cout << "after calcHist.." << endl;
-
   return output;
 }
 
@@ -697,10 +709,11 @@ int main()
     // Declare resources
     vector<vector<vector<float> > > models(4,vector<vector<float> >(8,vector<float>(0)));
     vector<vector<Mat> > modelHist;
-    allocate3dvect(modelHist, height, width);
-
+    vector<vector<Mat > > filterbank;
     vector<float> textonDictionary;
     const string type[] = {"train/", "test/", "novel/"};
+
+    allocate3dvect(modelHist, height, width);
 
     vector<float> sigmas;
     sigmas.push_back(1);
@@ -711,14 +724,12 @@ int main()
     vector<Mat > edge, bar, rot;
     makeRFSfilters(edge, bar, rot, sigmas, n_orientations);
 
-    // plot filters
+    // // plot filters
     // drawing(edge, bar, rot, n_sigmas, n_orientations);
 
-    vector<vector<Mat > > filterbank;
     filterbank.push_back(edge);
     filterbank.push_back(bar);
     filterbank.push_back(rot);
-
 
     // --------------------- Texton Dictionary Creation ---------------------- //
     // If statement to reduce const histRange scope, allowing it to be redeclared
@@ -744,38 +755,27 @@ int main()
       // Convert array to Mat
       Mat tmp(80, 80, CV_32FC1);
       textToMat(tmp, textonDictionary);
-      cout << "\nTmp size is: " << tmp.size() << endl;
-      cout << "\n\n\n Tmp size is: " << tmp.size() << "\n\n\n" << endl;
-      const string windowname1 = "hello";
+      const string windowname1 = "texton Distribution";
 
       // Generate texton histogram and return Mat image and display
       int histSize = 20;
       float range[] = { 0, 255 };
-      const float *histRange = {range};
       bool uniform = true;
-
-      Mat texHist = createHist(tmp, histSize ,histRange, uniform);
-      Mat histImage = showHist(texHist, histImage, histSize);
+      Mat histImage = createHist(tmp, histSize ,range, uniform);
+      Mat histImg = showHist(histImage, histSize);
 
       namedWindow(windowname1, CV_WINDOW_AUTOSIZE);
-      imshow(windowname1,histImage);
+      imshow(windowname1,histImg);
       waitKey(0);
       destroyWindow(windowname1);
     }
     int texDictSize = textonDictionary.size();
     float binArray[texDictSize];
     binLimits(textonDictionary, binArray, texDictSize);
-    texDictSize = sizeof(binArray)/sizeof(binArray[1]);
-
-    for(int i = 0; i <= texDictSize; i++){
-      cout << "This is number " << i << ": " << binArray[i] << endl;
-    }
-    cout << "Before the main loop, this is the number of values in the binArray (total size/size of element[0]): " << sizeof(binArray)/sizeof(binArray[0]) << endl;
-    cout << "value at number 40 " << binArray[40] << endl;
-
 
     bool cont;
     do{
+
       cout << "\nMenu: Please enter the chosen options number \n"<< endl;
       cout << "1: texton dictionary creation" << endl;
       cout << "2: model creation" << endl;
@@ -795,44 +795,40 @@ int main()
           // Measure start time
           auto t1 = std::chrono::high_resolution_clock::now();
 
+          // Return clusters(in models) from filter responses to images in test dirs
           createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
 
           // Loop through the different model classes
-//        myfunc(models[0][1]);
-        cout << "this is the model[0].size():" << models[0].size() << " This is the models[0][0].size(): " << models[1][0].size() << endl;
+          cout << "This is model.size(): " << models.size() << " this is the model[0].size():" << models[0].size() << " This is the models[0][0].size(): " << models[0][0].size() << endl;
 
           // loop through different classes
           for(int a = 0; a < models.size(); a++){
 
             // loop through different models
-            for(int b = 0; b < models[a].size(); b++){
+            for(int b = 0; b < models[a].size() && models[a][0].size() != 0; b++){
             cout << "This is the size before if: " << models[a][0].size() << endl;
               if(models[a][b].size()!=0){
                 cout << "starting this loop: " << a << " mini loop number: " << b << endl;
 
+                cout << "this is the models[a].size().. " << models[a].size() << endl;
+
   //              textonModel(textonDictionary, models[a][b]);
                 printModels(models[a]);
-              cout << "After print models.. " << endl;
-              cout << "This is the current models[a][b] value" << models[a][b].size() << endl;
-                // Convert array to Mat
-                Mat tmp(100,100,CV_32FC1);
-                textToMat(tmp, models[a][b]);
 
+                // Convert array to Mat
+                Mat tmp(120, 120, CV_32FC1);
+                textToMat(tmp, models[a][b]);
                 const string windowname2 = "models...";
 
                 // Generate texton histogram and return Mat image and display
                 bool uniform = false;
 
-                cout << "Before the main loop, this is the number of values in the binArray (total size/size of element[0]): " << sizeof(binArray)/sizeof(binArray[0]) << endl;
-                cout << "value at number 15 " << binArray[15] << endl;
-                const float *binArray1 = {binArray};
-                modelHist[a][b] = createHist(tmp, texDictSize, binArray1, uniform);
-                Mat histImage = showHist(modelHist[a][b], histImage, texDictSize);
+                modelHist[a][b] = createHist(tmp, texDictSize, binArray, uniform);
+                Mat histImg = showHist(modelHist[a][b], texDictSize);
 
-
+                cout << "outside of createHist going into imshow()\n\n";
                 namedWindow(windowname2, CV_WINDOW_AUTOSIZE);
-                imshow(windowname2,histImage);
-
+                imshow(windowname2,histImg);
                 waitKey(5000);
                 destroyWindow(windowname2);
               }
