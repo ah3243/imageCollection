@@ -346,8 +346,6 @@ void aggregateImg(uint num, double alpha, Mat &aggImg, Mat input) {
 Mat applyKmeans(Mat samples, int clusterCount){
     int  attempts = 5;
     Mat  labels, centers;
-    cout << "apply kmeans, this is size: " << labels.size() << "centres" << centers.size() << endl;
-    cout << "apply kmeans, this is the input mat size: " << samples.size() << endl;
     // Apply KMeans
     kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers);
     return centers;
@@ -588,7 +586,7 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<vector<float> 
     doCount ++;
   }while(doCount < classesSize);
   // Print Current referenced texton dictionary
-  printTexDict(textonDict);
+//  printTexDict(textonDict);
 }
 
 void roundTex(vector<float>& tex){
@@ -727,6 +725,23 @@ void clear2dMat(vector<vector<Mat> >& in, int height, int width){
   cout << "done clearing Mats.." << endl;
 }
 
+// double matchModel(Mat novel, vector<vector<Mat> > models, int height, int width){
+//   double distance = 0.0;
+//   cout << "inside matchModel " << endl;
+//   // for(int i = 0; i < models.size(); i++){
+//   //   for(int j = 0; !models[i][j].empty(); j++){
+//       // cout << "Model[i]:" << i << " Size: " << models[i].size() << endl;
+//       // cout << "Model[i][j]: " << j << " size: " << models[i][j].size() << endl;
+//       cout << "going to compare.. models[3][0]" << models[3][0] << endl;
+//
+//       //double tmp = compareHist(models[3][0], novel, CV_COMP_CHISQR);
+// //      cout << "This is tmp: " << tmp << endl;
+//   //  }
+//   //}
+//   cout << "leaving match Model.. this is distance: " << distance << endl;
+//   return distance;
+// }
+
 int main()
 {
     // Start the window thread(essential for deleting windows)
@@ -779,7 +794,7 @@ int main()
 
       // Print texton dict to console
       cout << "printing texton dictionary from main" << endl;
-      printTexDict(textonDictionary);
+    //  printTexDict(textonDictionary);
 
       // Convert array to Mat
       Mat tmp(80, 80, CV_32FC1);
@@ -859,7 +874,7 @@ int main()
                 cout << "outside of createHist going into imshow()\n\n";
                 namedWindow(windowname2, CV_WINDOW_AUTOSIZE);
                 imshow(windowname2,histImg);
-                waitKey(5000);
+                waitKey();
                 destroyWindow(windowname2);
               }
             }
@@ -885,14 +900,19 @@ int main()
 
         // If textonDictionary is empty redirect to main
         if(!textonDictionary.empty()){
-          cout << "Creating model for novel image" << endl;
-
           // Measure start time
           auto t3 = std::chrono::high_resolution_clock::now();
 
           vector<vector<Mat> > response;
 
           Mat inputImg =  imread("../../../TEST_IMAGES/testImage/52a-scale_2_im_8_col.png", CV_LOAD_IMAGE_GRAYSCALE);
+          if(!inputImg.data){
+            cout << "unable to load image.." << endl;
+            return -1;
+          }
+
+          namedWindow("testing", CV_WINDOW_AUTOSIZE);
+          imshow("testing", inputImg);
 
           apply_filterbank(inputImg, filterbank, response, n_sigmas, n_orientations);
           testImgModel(response, testModel);
@@ -907,12 +927,33 @@ int main()
           Mat tmp(120, 120, CV_32FC1);
           textToMat(tmp, testModel);
           bool uniform = false;
-
+          cout << "going into create Hist" << endl;
           Mat novelHist = createHist(tmp, texDictSize, binArray, uniform);
-          Mat histImg = showHist(novelHist, texDictSize);
 
+          cout << "going into matchModel" << endl;
+//          double tmpdouble = compareHist(modelHist[3][0], novelHist, CV_COMP_CHISQR);
+
+          double distance = 0.0;
+          cout << "inside matchModel " << endl;
+          for(int i = 0; i < modelHist.size(); i++){
+            for(int j = 0; !modelHist[i][j].empty(); j++){
+              double tmpt = compareHist(modelHist[i][j], novelHist, CV_COMP_CHISQR);
+              cout << "This is tmp: " << tmpt << endl;
+              if(tmpt>distance){
+                distance = tmpt;
+                cout << "found a larger one: " << distance << endl;
+              }
+            }
+          }
+          //int value = (double) distance;
+//          cout << "This is the final value: " << value << endl;
+
+//          double distance = matchModel(novelHist, modelHist, height, width);
+
+          Mat histImg = showHist(novelHist, texDictSize);
           namedWindow("testImage", CV_WINDOW_AUTOSIZE);
           imshow("testImage", histImg);
+
           // Measure time efficiency
           auto t4 = std::chrono::high_resolution_clock::now();
           std::cout << "f() took "
@@ -921,7 +962,6 @@ int main()
 
           waitKey(2000);
           cvDestroyAllWindows();
-
           cont = true;
         }
         else{
