@@ -24,7 +24,6 @@ using namespace cv;
 
 typedef unsigned int uint;
 const float PI = 3.1415;
-int texDictSize = 40;
 
 //response = np.exp(-x ** 2 / (2. * sigma ** 2))
 void func1(float *response, float *lengths, float sigma, int size)
@@ -368,37 +367,6 @@ Mat createSamples(Mat input, int cluster){
     return applyKmeans(samples, cluster);
 }
 
-// converts input 1d Mat to vector
-void matToVec(vector<float> &textonDict, Mat centers){
-  for(int j = 0;j < centers.rows;j++){
-    textonDict.push_back(centers.at<float>(0, j));
-  }
-}
-
-void drawingResponceInner(vector<Mat>& response, vector<vector<float> > &models, int &counter, int flag, Mat &aggImg, uint type, double& alpha){
-  for(uint imageIndex = 0; imageIndex < response.size(); imageIndex++){
-    if(flag){
-      // Aggregate for Texton Dictionary
-      aggregateImg(counter, alpha, aggImg, response[imageIndex]);
-      alpha *= 0.5;
-    }else {
-      cout << "\ndrawing Response model:" << type << " : " << imageIndex << endl;
-      // cluster and save to models
-      Mat clusters = createSamples(response[imageIndex], 10);
-      matToVec(models[counter], clusters);
-    }
-  }
-}
-
-// produce Agg image from responses
-void drawingResponce(vector<vector<Mat> > &response, vector<vector<float> > &models, int &counter, int flag, Mat &aggImg){
-    double alpha = 0.5;
-    for(uint type = 0; type < response.size(); type++)
-    {
-      drawingResponceInner(response[type], models, counter, flag, aggImg, type, alpha);
-    }
-}
-
 // Print Texton Dictionary
 void printTexDict(vector<float> textonDict){
   int classesSize = textonDict.size();
@@ -408,16 +376,20 @@ void printTexDict(vector<float> textonDict){
   }
 }
 
-void printModels(vector <vector<float> > v){
-  cout << "Below are the model cluster centers, vector size: " << v.size() << endl;
-    for(int b =0;b<v.size();b++){
-     cout << "Model:" << b << "\nIt's size is: " << v[1].size() <<  endl;
-      for(int i = 0; i < v[b].size(); i++){
-          cout << v[b][i] << " ";
+void printModelsInner(vector<float> v, int count){
+   cout << "Model:" << count << "\nIt's size is: " << v.size() <<  endl;
+      for(int i = 0; i < v.size(); i++){
+          cout << v[i] << " ";
       }
       cout << "\n";
-    }
 }
+
+void printModels(vector <vector<float> > v){
+  cout << "Below are the model cluster centers, vector size: " << v.size() << endl;
+    for(int b =0;b<v.size();b++)
+     printModelsInner(v[b], b);
+}
+
 
 // Check that file in dir is an accepted img type
 bool hasEnding(std::string const &fullString, std::string const &ending) {
@@ -452,6 +424,48 @@ bool loadImg(Mat& img){
       roundModelInner(v[i]);
     }
   }
+
+// converts input 1d Mat to vector
+void matToVec(vector<float> &textonDict, Mat centers){
+  for(int j = 0;j < centers.rows;j++){
+    textonDict.push_back(centers.at<float>(0, j));
+  }
+}
+
+void drawingResponceInner(vector<Mat>& response, vector<vector<float> > &models, int &counter, int flag, Mat &aggImg, uint type, double& alpha){
+  for(uint imageIndex = 0; imageIndex < response.size(); imageIndex++){
+    if(flag){
+      // Aggregate for Texton Dictionary
+      aggregateImg(counter, alpha, aggImg, response[imageIndex]);
+      alpha *= 0.5;
+    }else {
+      cout << "\ndrawing Response model:" << type << " : " << imageIndex << endl;
+      // cluster and save to models
+      Mat clusters = createSamples(response[imageIndex], 10);
+      matToVec(models[counter], clusters);
+    }
+  }
+}
+
+// produce Agg image from responses
+void drawingResponce(vector<vector<Mat> > &response, vector<vector<float> > &models, int &counter, int flag, Mat &aggImg){
+    double alpha = 0.5;
+    for(uint type = 0; type < response.size(); type++)
+    {
+      drawingResponceInner(response[type], models, counter, flag, aggImg, type, alpha);
+    }
+}
+
+void testImgModel(vector<vector<Mat> > &response, vector<float> &model){
+  int numOfClusters = 10;
+
+  for(int i = 0; i < response.size(); i++){
+    for(int j = 0; j < response[i].size(); j++){
+      Mat clusters = createSamples(response[i][j], numOfClusters);
+      matToVec(model, clusters);
+    }
+  }
+}
 
 // Generate models from training images
 void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models, int counter){
@@ -688,13 +702,29 @@ void binLimits(vector<float> texDict, float* bins, int size){
   bins[size] = 255;
 }
 
-void allocate3dvect(vector<vector<Mat> >& in, int height, int width){
+void allocate2dMat(vector<vector<Mat> >& in, int height, int width){
   for(int i = 0;i < height;i++){
     in.push_back(vector<Mat>());
     for(int j = 0;j < width;j++){
       in[i].push_back(Mat(400,600,CV_8UC1));
     }
   }
+}
+
+void clear2dvect(vector<vector<vector<float> > >& in, int height, int width){
+  for(int i = 0;i < in.size();i++){
+    for(int j = 0;j < in[i].size();j++){
+      in[i][j].clear();
+    }
+  }
+  cout << "done clearing float Vectors.." << endl;
+}
+
+void clear2dMat(vector<vector<Mat> >& in, int height, int width){
+  for(int i = 0;i < height;i++){
+    in[i].clear();
+  }
+  cout << "done clearing Mats.." << endl;
 }
 
 int main()
@@ -712,7 +742,7 @@ int main()
     vector<float> textonDictionary;
     const string type[] = {"train/", "test/", "novel/"};
 
-    allocate3dvect(modelHist, height, width);
+    allocate2dMat(modelHist, height, width);
 
     vector<float> sigmas;
     sigmas.push_back(1);
@@ -794,6 +824,10 @@ int main()
           // Measure start time
           auto t1 = std::chrono::high_resolution_clock::now();
 
+          cout << "entering clear vectors" << endl;
+          clear2dvect(models, 10, 10);
+          clear2dMat(modelHist, 10, 10);
+
           // Return clusters(in models) from filter responses to images in test dirs
           createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
 
@@ -808,12 +842,9 @@ int main()
   //          cout << "This is the size before if: " << models[a][0].size() << endl;
               if(models[a][b].size()!=0){
                 cout << "starting this loop: " << a << " mini loop number: " << b << endl;
-                cout << "\n\nbefore textonModel.." << endl;
-                printModels(models[a]);
                 textonModel(textonDictionary, models[a][b]);
-                cout << "after textonModels.. \n\n\n";
                 printModels(models[a]);
-                cout << "done printing.." << endl;
+
                 // Convert array to Mat
                 Mat tmp(120, 120, CV_32FC1);
                 textToMat(tmp, models[a][b]);
@@ -848,39 +879,58 @@ int main()
       }
 
       // --------------------- Test Novel Image ---------------------- //
-//       else if(tmp == "3"){
-//         cout << "Entering test mode" << endl;
-//         vector<float> testModel;
-//
-//         // If textonDictionary is empty redirect to main
-//         if(!textonDictionary.empty()){
-//           cout << "Creating model for novel image" << endl;
-//
-//           // Measure start time
-//           auto t3 = std::chrono::high_resolution_clock::now();
-//
-// //          createTexDic(filterbank, testModel, n_sigmas, n_orientations, textonDictionary, type[2]);
-//
-//           // Replace model cluster centres with nearest texton
-//           textonModel(textonDictionary, testModel);
-//           printModels(testModel);
-//
-//
-//           // Measure time efficiency
-//           auto t4 = std::chrono::high_resolution_clock::now();
-//           std::cout << "f() took "
-//                     << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()
-//                     << " milliseconds\n";
-//
-//           cont = true;
-//         }
-        // else{
-        //   cout << "\nYou must create the texton library before model creation." << endl;
-        //   waitKey(1000);
-        // }
-        //
-        // cont = true;
-      // }
+      else if(tmp == "3"){
+        cout << "Entering test mode" << endl;
+        vector<float> testModel;
+
+        // If textonDictionary is empty redirect to main
+        if(!textonDictionary.empty()){
+          cout << "Creating model for novel image" << endl;
+
+          // Measure start time
+          auto t3 = std::chrono::high_resolution_clock::now();
+
+          vector<vector<Mat> > response;
+
+          Mat inputImg =  imread("../../../TEST_IMAGES/testImage/52a-scale_2_im_8_col.png", CV_LOAD_IMAGE_GRAYSCALE);
+
+          apply_filterbank(inputImg, filterbank, response, n_sigmas, n_orientations);
+          testImgModel(response, testModel);
+
+          cout << "Before conversion: \n\n";
+          printModelsInner(testModel, 0);
+          textonModel(textonDictionary, testModel);
+          cout << "After conversion: \n\n";
+          printModelsInner(testModel, 0);
+
+          // Convert array to Mat
+          Mat tmp(120, 120, CV_32FC1);
+          textToMat(tmp, testModel);
+          bool uniform = false;
+
+          Mat novelHist = createHist(tmp, texDictSize, binArray, uniform);
+          Mat histImg = showHist(novelHist, texDictSize);
+
+          namedWindow("testImage", CV_WINDOW_AUTOSIZE);
+          imshow("testImage", histImg);
+          // Measure time efficiency
+          auto t4 = std::chrono::high_resolution_clock::now();
+          std::cout << "f() took "
+                    << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()
+                    << " milliseconds\n";
+
+          waitKey(2000);
+          cvDestroyAllWindows();
+
+          cont = true;
+        }
+        else{
+          cout << "\nYou must create the texton library before model creation." << endl;
+          waitKey(1000);
+        }
+
+        cont = true;
+      }
       else if(tmp == "4"){
         cout << "exiting" << endl;
         cont = false;
