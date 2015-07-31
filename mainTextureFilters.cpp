@@ -26,29 +26,25 @@ typedef unsigned int uint;
 const float PI = 3.1415;
 
 //response = np.exp(-x ** 2 / (2. * sigma ** 2))
-void func1(float *response, float *lengths, float sigma, int size)
-{
+void func1(float *response, float *lengths, float sigma, int size) {
     for(int i = 0; i < size; i++)
         response[i] = exp(- lengths[i] * lengths[i] / (2 * sigma * sigma));
 }
 
 //response = -response * x
-void func2(float *response, float *lengths, int size)
-{
+void func2(float *response, float *lengths, int size) {
     for(int i = 0; i < size; i++)
         response[i] = -response[i] * lengths[i];
 }
 
 //response = response * (x ** 2 - sigma ** 2)
-void func3(float *response, float *lengths, float sigma, int size)
-{
+void func3(float *response, float *lengths, float sigma, int size) {
     for(int i = 0; i < size; i++)
         response[i] = response[i] * (lengths[i] * lengths[i] - sigma * sigma);
 }
 
 // response /= np.abs(response).sum()
-void normalize(float *response, int size)
-{
+void normalize(float *response, int size) {
     float summ = 0;
     for(int i = 0; i < size; i++)
         summ += std::abs(response[i]);
@@ -56,8 +52,7 @@ void normalize(float *response, int size)
         response[i] /= summ;
 }
 
-void make_gaussian_filter(float *response, float *lengths, float sigma, int size, int order=0)
-{
+void make_gaussian_filter(float *response, float *lengths, float sigma, int size, int order=0) {
     assert(order <= 2);//, "Only orders up to 2 are supported"
 
     // compute unnormalized Gaussian response
@@ -70,26 +65,22 @@ void make_gaussian_filter(float *response, float *lengths, float sigma, int size
     normalize(response, size);
 }
 
-void getX(float *xCoords, Point2f* pts, int size)
-{
+void getX(float *xCoords, Point2f* pts, int size) {
     for(int i = 0; i < size; i++)
         xCoords[i] = pts[i].x;
 }
 
-void getY(float *yCoords, Point2f* pts, int size)
-{
+void getY(float *yCoords, Point2f* pts, int size) {
     for(int i = 0; i < size; i++)
         yCoords[i] = pts[i].y;
 }
 
-void multiplyArrays(float *gx, float *gy, float *response, int size)
-{
+void multiplyArrays(float *gx, float *gy, float *response, int size) {
     for(int i = 0; i < size; i++)
         response[i] = gx[i] * gy[i];
 }
 
-void makeFilter(float scale, int phasey, Point2f* pts, float *response, int size)
-{
+void makeFilter(float scale, int phasey, Point2f* pts, float *response, int size) {
     float xCoords[size];
     float yCoords[size];
     getX(xCoords, pts, size);
@@ -103,8 +94,7 @@ void makeFilter(float scale, int phasey, Point2f* pts, float *response, int size
     normalize(response, size);
 }
 
-void createPointsArray(Point2f *pointsArray, int radius)
-{
+void createPointsArray(Point2f *pointsArray, int radius) {
     int index = 0;
     for(int x = -radius; x <= radius; x++)
         for(int y = -radius; y <= radius; y++)
@@ -114,8 +104,7 @@ void createPointsArray(Point2f *pointsArray, int radius)
         }
 }
 
-void rotatePoints(float s, float c, Point2f *pointsArray, Point2f *rotatedPointsArray, int size)
-{
+void rotatePoints(float s, float c, Point2f *pointsArray, Point2f *rotatedPointsArray, int size) {
     for(int i = 0; i < size; i++)
     {
         rotatedPointsArray[i].x = c * pointsArray[i].x - s * pointsArray[i].y;
@@ -123,14 +112,12 @@ void rotatePoints(float s, float c, Point2f *pointsArray, Point2f *rotatedPoints
     }
 }
 
-void computeLength(Point2f *pointsArray, float *length, int size)
-{
+void computeLength(Point2f *pointsArray, float *length, int size) {
     for(int i = 0; i < size; i++)
         length[i] = sqrt(pointsArray[i].x * pointsArray[i].x + pointsArray[i].y * pointsArray[i].y);
 }
 
-void toMat(float *edgeThis, Mat &edgeThisMat, int support)
-{
+void toMat(float *edgeThis, Mat &edgeThisMat, int support) {
     edgeThisMat = Mat::zeros(support, support, CV_32FC1);
     float* nextPts = (float*)edgeThisMat.data;
     for(int i = 0; i < support * support; i++)
@@ -139,9 +126,7 @@ void toMat(float *edgeThis, Mat &edgeThisMat, int support)
     }
 }
 
-void makeRFSfilters(vector<Mat>& edge, vector<Mat >& bar, vector<Mat>& rot,
-                    vector<float> &sigmas, int n_orientations=6, int radius=24)
-{
+void makeRFSfilters(vector<Mat>& edge, vector<Mat >& bar, vector<Mat>& rot, vector<float> &sigmas, int n_orientations=6, int radius=24) {
     int support = 2 * radius + 1;
     int size = support * support;
     Point2f orgpts[size];
@@ -187,8 +172,7 @@ void makeRFSfilters(vector<Mat>& edge, vector<Mat >& bar, vector<Mat>& rot,
 }
 
 //", vector<Mat>& edgeNormalised"
-void normaliseFilters(vector<Mat>& edge, vector<Mat>& edgeNormalised)
-{
+void normaliseFilters(vector<Mat>& edge, vector<Mat>& edgeNormalised) {
     int size = edge[0].rows * edge[0].cols;
     for(uint i = 0; i < edge.size(); i++)
     {
@@ -209,8 +193,7 @@ void normaliseFilters(vector<Mat>& edge, vector<Mat>& edgeNormalised)
     }
 }
 
-void drawing(vector<Mat>& edge, vector<Mat>& bar, vector<Mat>& rot, int n_sigmas, int n_orientations)
-{
+void drawing(vector<Mat>& edge, vector<Mat>& bar, vector<Mat>& rot, int n_sigmas, int n_orientations) {
     vector<Mat > edgeNormalised, barNormalised, rotNormalised;
     normaliseFilters(edge, edgeNormalised);
     normaliseFilters(bar, barNormalised);
@@ -244,11 +227,7 @@ void drawing(vector<Mat>& edge, vector<Mat>& bar, vector<Mat>& rot, int n_sigmas
 
 }
 
-void  apply_filterbank(Mat &img,
-                       vector<vector<Mat> > &filterbank,
-                       vector<vector<Mat> > &response,
-                       int n_sigmas, int n_orientations)
-{
+void  apply_filterbank(Mat &img, vector<vector<Mat> > &filterbank, vector<vector<Mat> > &response, int n_sigmas, int n_orientations) {
     response.resize(3);
     vector<Mat>& edges = filterbank[0];
     vector<Mat>& bar = filterbank[1];
@@ -302,9 +281,8 @@ void  apply_filterbank(Mat &img,
         newMat.convertTo(newMatUchar, CV_8UC1);
         response[2].push_back(newMatUchar);
 
-    }
-
-cout <<"leaving apply filterbank" << endl;
+      }
+  cout <<"leaving apply filterbank" << endl;
 }
 
 void normaliseImage(Mat& image, Mat& normalised)
@@ -476,32 +454,8 @@ void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models
   response.clear();
 }
 
-// int testImage(string path, vector<vector<Mat> >& filterbank, vector<float>& model, int n_sigmas, int n_orientations){
-//
-//   Mat tstImg = imread(path, CV_LOAD_IMAGE_GRAYSCALE);
-//
-//   if(!loadImg(tstImg)){
-//     cout << "unable to load test image. Exiting." << endl;
-//     return -1;
-//   }
-//
-//   vector<vector<Mat> > response;
-//
-//   apply_filterbank(tstImg, filterbank, response, n_sigmas, n_orientations);
-//   drawingResponce(response, model, counter, );
-//
-//   roundModelInner(model);
-//
-//   waitKey(1000);
-//   response.clear();
-//   return 1;
-// }
-
 // Generate Texton Dictionary from all imgs in sub dirs
-void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<vector<float> > >& models, int n_sigmas, int n_orientations, vector<float>& textonDict, string type){
-  // import images from dir
-  string textonclasses[] = {"cotton/", "wood/", "cork/", "bread/"};
-  vector<string> classes (textonclasses, textonclasses + sizeof(textonclasses)/sizeof(textonclasses[0]));
+void createTexDic(vector<vector<Mat> >& filterbank, vector<string> classes , vector<vector<vector<float> > >& models, int n_sigmas, int n_orientations, vector<float>& textonDict, string type){
 
   string extTypes[] = {".jpg", ".png", ".bmp"};
   int classesSize = classes.size();
@@ -514,6 +468,7 @@ void createTexDic(vector<vector<Mat> >& filterbank, vector<vector<vector<float> 
     string dirtmp = "../../../TEST_IMAGES/kth-tips/";
     dss << dirtmp;
     dss << classnme;
+    dss << "/";
     dss << type;
     string dirNme = dss.str();
 
@@ -757,6 +712,10 @@ int main()
     vector<float> textonDictionary;
     const string type[] = {"train/", "test/", "novel/"};
 
+    // dirs holding texton and model generating images
+    string textonclasses[] = {"cotton", "wood", "cork", "bread"};
+    vector<string> classes (textonclasses, textonclasses + sizeof(textonclasses)/sizeof(textonclasses[0]));
+
     allocate2dMat(modelHist, height, width);
 
     vector<float> sigmas;
@@ -785,7 +744,7 @@ int main()
       cout << "texton Dictionary cleared. " << endl;
 
       // Create texton dict and store
-      createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[0]);
+      createTexDic(filterbank, classes, models, n_sigmas, n_orientations, textonDictionary, type[0]);
 
       // Sort texton Dict and round to 2dp
       sort(textonDictionary.begin(), textonDictionary.end());
@@ -844,7 +803,7 @@ int main()
           clear2dMat(modelHist, 10, 10);
 
           // Return clusters(in models) from filter responses to images in test dirs
-          createTexDic(filterbank, models, n_sigmas, n_orientations, textonDictionary, type[1]);
+          createTexDic(filterbank, classes, models, n_sigmas, n_orientations, textonDictionary, type[1]);
 
           // Loop through the different model classes
           cout << "This is model.size(): " << models.size() << " this is the model[0].size():" << models[0].size() << " This is the models[0][0].size(): " << models[0][0].size() << endl;
@@ -939,10 +898,12 @@ int main()
             for(int j = 0; !modelHist[i][j].empty(); j++){
               double tmpt = compareHist(modelHist[i][j], novelHist, CV_COMP_CHISQR);
               cout << "This is tmp: " << tmpt << endl;
-              if(tmpt>distance){
+              if(tmpt<distance){
                 distance = tmpt;
                 cout << "found a larger one: " << distance << endl;
               }
+                int intDistance = (double) tmpt;
+                cout << "This is the int distance: " << intDistance << endl;
             }
           }
           //int value = (double) distance;
