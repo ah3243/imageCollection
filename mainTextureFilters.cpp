@@ -375,7 +375,6 @@ void printModels(vector <vector<float> > v){
      printModelsInner(v[b], b);
 }
 
-
 // Check that file in dir is an accepted img type
 bool hasEnding(std::string const &fullString, std::string const &ending) {
     if (fullString.length() >= ending.length()) {
@@ -537,19 +536,10 @@ void createTexDic(mH2 filterbank, vector<string> classes , m3& models, int n_sig
         // the number of values already in array
         matToVec(textonDict, centers);
       }
-
     }
-
-    // FileStorage fs("../textonDictionary.xml", FileStorage::WRITE);
-    // fs << "wood" << "[";
-    // fs << centers;
-    // fs << "]";
-    // fs.release();
 
     doCount ++;
   }while(doCount < classesSize);
-  // Print Current referenced texton dictionary
-//  printTexDict(textonDict);
 }
 
 void roundTex(vector<float>& tex){
@@ -661,33 +651,6 @@ void binLimits(vector<float> texDict, float* bins, int size){
   bins[size] = 255;
 }
 
-void allocate2dMat(vector<vector<Mat> >& in, int height, int width){
-  for(int i = 0;i < height;i++){
-    in.push_back(vector<Mat>());
-    for(int j = 0;j < width;j++){
-      in[i].push_back(Mat(400,600,CV_8UC1));
-    }
-  }
-}
-
-m3 clear2dvect(vector<vector<vector<float> > >& in){
-   in.clear();
-
-  m3 out(4, m2(8, m1(0)));
-  cout << "\n\n\nThis is vectors size before leaving..: " << out.size() << endl;
-
-  return out;
-}
-
-mH2 clear2dMat(vector<vector<Mat> >& in){
-  in.clear();
-
-  mH2 out(10,mH1(10, Mat(80,1,CV_32FC1)));
-  cout << "This is the MAt size: " << out.size() << endl;
-
-  return out;
-}
-
 void savetxtDict(vector<float> dict){
   FileStorage fs("txtDict.xml", FileStorage::WRITE);
   fs << "TextonDictionary" << "[";
@@ -713,26 +676,41 @@ void loadTexDict(FileStorage& fs, vector<float>& texDict){
     cout << "  Saved value: " << texDict[cnt] << endl;
     cnt++;
   }
-
     cout << "\n\nfinished reading.." << endl;
 }
-void loadHist(mH2 hist){
+
+void loadHist(mH2& hist){
   FileStorage fs("test123.xml", FileStorage::READ);
-  FileNode n = fs["Class_3"];
+  FileNode n = fs["ModelHistograms"];
 
-  int cnt1 =0;
-  stringstream ss1;
-  ss1 << "Model_";
-  ss1 << cnt1;
-  string a = ss1.str();
+  // Loop through Classes
+  for(int i=0;i<n.size();i++){
+    stringstream ss;
+    ss << "Class_";
+    ss << i;
+    string a = ss.str();
 
-  FileNode ns = n[a];
-  FileNodeIterator it = ns.begin(), it_end = ns.end();
-  for(;it != it_end;++it){
-    Mat mask;
-    (*it) >> mask;
-    cout << " Saved Value.. " << mask.at<float>(0,0) << endl;
-  cnt1++;
+    FileNode n1 = n[a];
+
+    cout << "\nThis is: " << a <<  " Entering loop." << endl;
+
+    // Loop through Each classes Models
+    for(int j = 0; j < n1.size(); j++){
+      stringstream ss1;
+      ss1 << "Model_";
+      ss1 << j;
+      string b = ss1.str();
+
+      FileNode n2 = n1[b];
+      cout << "This is: " << b <<  " Entering loop." << endl;
+
+      // Save stored Mat to mask
+      FileNodeIterator it = n2.begin(), it_end = n2.end();
+      for(;it != it_end;++it){
+        Mat mask;
+        (*it) >> hist[i][j];
+      }
+    }
   }
   fs.release();
 }
@@ -742,6 +720,7 @@ void saveHist(mH2 hist){
   FileStorage fs("test123.xml", FileStorage::WRITE);
 
   int size = hist.size();
+  fs << "ModelHistograms" << "{";
 
   for(int i=0;i<size;i++){
     stringstream ss;
@@ -764,6 +743,7 @@ void saveHist(mH2 hist){
     }
     fs << "}";
   }
+  fs << "}";
   fs.release();
 }
 
@@ -935,9 +915,9 @@ int main()
               }
             }
           }
-//          saveHist(modelHist);
+          saveHist(modelHist);
 
-           loadHist(modelHist);
+         loadHist(modelHist);
 
 
           // Measure time efficiency
