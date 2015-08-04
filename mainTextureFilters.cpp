@@ -426,7 +426,8 @@ void drawingResponceInner(vector<Mat>& response, vector<vector<float> > &models,
       cout << "\ndrawing Response model:" << type << " : " << imageIndex << endl;
       // cluster and save to models
       Mat clusters = createSamples(response[imageIndex], 10);
-      matToVec(models[counter], clusters);
+      // multiply type*3 then add imageIndex to access all 8 vector locations
+      matToVec(models[(type*3)+imageIndex], clusters);
     }
   }
 }
@@ -458,7 +459,6 @@ void createModels(vector<vector<Mat> >& response, vector<vector<float> >& models
   drawingResponce(response, models,counter, 0, aggImg);
 //  roundModel(models);
 
-  waitKey(1000);
   response.clear();
 }
 
@@ -613,7 +613,7 @@ void createHist(Mat& in, Mat& out, int histSize, const float* histRange, bool un
 }
 
 // Takes in Vector<float> and converts to Mat<float>
-void textToMat(Mat& tmp, vector<float> texDict){
+void textToMat(Mat& tmp, vector<float>& texDict){
  cout << "\n\n\n\nThis is textToMAt.size(): " <<  texDict.size() << "\n";
  cout << "This is MAt.size(): " <<  tmp.size() << "\n\n\n";
   for(int i = 0; i < texDict.size();i++){
@@ -831,25 +831,28 @@ void generateModels(mH2 filterbank, vector<float> textonDictionary, const float*
   // loop through different classes
   for(int a = 0; a < models.size(); a++){
     // loop through different models
-    for(int b = 0; b < models[a].size() && models[a][0].size() != 0; b++){
+    for(int b = 0; b < models[a].size(); b++){
       if(models[a][b].size()!=0){
         cout << "starting this loop: " << a << " mini loop number: " << b << endl;
+        cout << "this is the texton dictionary size: " << textonDictionary.size() << endl;
+        cout << "TYhis is the model[a][b].size(): " << models[a][b].size() << "\n\n";
 
         textonModel(textonDictionary, models[a][b]);
 
-        // Convert array to Mat
-        Mat tmp = Mat::zeros(80, 1, CV_32FC1);
+        // Convert array to Mat, large tmp.rows prevents overrun
+        Mat tmp = Mat::zeros(500, 1, CV_32FC1);
         textToMat(tmp, models[a][b]);
 
         // Generate texton histogram and return Mat image and display
         bool uniform = false;
 
         createHist(tmp, modelHist[a][b],textonDictionary.size(), binArray, uniform);
+        cout << "This is the modelSize after: " << modelHist[a][b].size() << endl;
+
 //            Mat histImg = showHist(modelHist[a][b], texDictSize);
       }
     }
   }
-
     saveHist(modelHist);
 }
 
@@ -985,6 +988,7 @@ int main()
         apply_filterbank(inputImg, filterbank, response, n_sigmas, n_orientations);
         testImgModel(response, testModel);
 
+        // Replace cluster centers with nearest Texton
         textonModel(textonDictionary, testModel);
 
         // Get total length of single column matrix
@@ -998,6 +1002,7 @@ int main()
         Mat novelHist = Mat::zeros(listLen, 1, CV_32FC1);
         createHist(tmp, novelHist, textonDictionary.size(), binArray, uniform);
 
+        // Distance with overly large number
         double distance = 10000000.0, tmpt = 0.0;
         int match = -1;
 
@@ -1008,9 +1013,10 @@ int main()
             for(int q=0;q<modelHist[i][j].rows;q++){
               sum += modelHist[i][j].at<float>(q,1);
             }
-            if(sum>1){
+            if(sum>1 && modelHist[i][j].rows == 40){
               tmpt = compareHist(modelHist[i][j], novelHist, CV_COMP_CHISQR);
-              cout << "\n\nThis is the difference.. " << tmpt << endl;
+
+              cout << "This is the difference.. " << tmpt << endl;
 
               if(tmpt<distance){
                 distance = tmpt;
