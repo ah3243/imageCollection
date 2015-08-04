@@ -614,8 +614,10 @@ void createHist(Mat& in, Mat& out, int histSize, const float* histRange, bool un
 
 // Takes in Vector<float> and converts to Mat<float>
 void textToMat(Mat& tmp, vector<float> texDict){
+ cout << "\n\n\n\nThis is textToMAt.size(): " <<  texDict.size() << "\n";
+ cout << "This is MAt.size(): " <<  tmp.size() << "\n\n\n";
   for(int i = 0; i < texDict.size();i++){
-    tmp.at<float>(i,0) = texDict.at(i);
+    tmp.at<float>(i,0) = texDict[i];
   }
 }
 
@@ -677,6 +679,7 @@ void loadTex(vector<float>& out){
   FileNode n = fs["TextonDictionary"];
   if(n.type() != FileNode::SEQ){
     cout << "incorrect filetype: " << n.type() << endl;
+    fs.release();
     return;
   }
 
@@ -696,6 +699,7 @@ void loadBins(float* out){
   FileNode n = fs["binArray"];
   if(n.type() != FileNode::SEQ){
     cout << "incorrect filetype: " << n.type() << endl;
+    fs.release();
     return;
   }
 
@@ -722,8 +726,6 @@ void loadHist(mH2& hist){
 
     FileNode n1 = n[a];
 
-    cout << "\nThis is: " << a <<  " Entering loop." << endl;
-
     // Loop through Each classes Models
     for(int j = 0; j < n1.size(); j++){
       stringstream ss1;
@@ -732,7 +734,6 @@ void loadHist(mH2& hist){
       string b = ss1.str();
 
       FileNode n2 = n1[b];
-      cout << "This is: " << b <<  " Entering loop." << endl;
 
       // Save stored Mat to mask
       FileNodeIterator it = n2.begin(), it_end = n2.end();
@@ -858,7 +859,7 @@ int main()
     cvStartWindowThread();
 
     // dirs holding texton and model generating images
-    string textonclasses[] = {"cotton", "wood", "cork", "bread"};
+    string textonclasses[] = {"wood", "cotton", "cork", "bread"};
     vector<string> classes (textonclasses, textonclasses + sizeof(textonclasses)/sizeof(textonclasses[0]));
 
     int height = 10;
@@ -891,8 +892,6 @@ int main()
 
       cout << "creating texton dictionary" << endl;
 
-
-
       // Check for saved Dictionary xml file, generate and save new one if not found
       ifstream savedDict("txtDict.xml");
       if(!savedDict){
@@ -908,7 +907,7 @@ int main()
         cout << "\n\n\nCAlculating models...\n\n";
         float binArray[textonDictionary.size()];
         loadBins(binArray);
-        generateModels(filterbank, textonDictionary, binArray, classes, n_sigmas, n_orientations, type[0]);
+        generateModels(filterbank, textonDictionary, binArray, classes, n_sigmas, n_orientations, type[1]);
       }
 
       printTexDict(textonDictionary);
@@ -948,7 +947,7 @@ int main()
         float binArray[textonDictionary.size()];
         loadBins(binArray);
 
-        generateModels(filterbank, textonDictionary, binArray, classes, n_sigmas, n_orientations, type[0]);
+        generateModels(filterbank, textonDictionary, binArray, classes, n_sigmas, n_orientations, type[1]);
 
         // Measure time efficiency
         auto t2 = std::chrono::high_resolution_clock::now();
@@ -962,7 +961,7 @@ int main()
       else if(tmp == "3"){
         cout << "\n\n-------------------Testing Image Against Models--------------------\n\n";
         // Measure start time
-        auto t3 = std::chrono::high_resolution_clock::now();
+//        auto t3 = std::chrono::high_resolution_clock::now();
 
         vector<float> textonDictionary;
         loadTex(textonDictionary);
@@ -976,89 +975,81 @@ int main()
 
         vector<float> testModel;
 
+        Mat inputImg =  imread("../../../TEST_IMAGES/testImage/52a-scale_2_im_8_col.png", CV_LOAD_IMAGE_GRAYSCALE);
+        if(!inputImg.data){
+          cout << "unable to load image.." << endl;
+          return -1;
+        }
 
+        vector<vector<Mat> > response;
+        apply_filterbank(inputImg, filterbank, response, n_sigmas, n_orientations);
+        testImgModel(response, testModel);
 
-          Mat inputImg =  imread("../../../TEST_IMAGES/testImage/52a-scale_2_im_8_col.png", CV_LOAD_IMAGE_GRAYSCALE);
-          if(!inputImg.data){
-            cout << "unable to load image.." << endl;
-            return -1;
-          }
+        textonModel(textonDictionary, testModel);
 
-          vector<vector<Mat> > response;
-          apply_filterbank(inputImg, filterbank, response, n_sigmas, n_orientations);
-          testImgModel(response, testModel);
+        // Get total length of single column matrix
+        int listLen = testModel.size();
 
-          cout << "Before conversion: \n\n";
-          printModelsInner(testModel, 0);
-          textonModel(textonDictionary, testModel);
-          cout << "After conversion: \n\n";
-          printModelsInner(testModel, 0);
+        // Convert array to Mat
+        Mat tmp = Mat::zeros(listLen, 1, CV_32FC1);
+        textToMat(tmp, testModel);
+        bool uniform = false;
 
-          // Get total length of single column matrix
-          int listLen = testModel.size();
+        Mat novelHist = Mat::zeros(listLen, 1, CV_32FC1);
+        createHist(tmp, novelHist, textonDictionary.size(), binArray, uniform);
 
-          // Convert array to Mat
-          Mat tmp(listLen, 1, CV_32FC1);
-          textToMat(tmp, testModel);
-          bool uniform = false;
-          cout << "going into create Hist" << endl;
-          Mat novelHist;
-          createHist(tmp, novelHist, textonDictionary.size(), binArray, uniform);
+        double distance = 10000000.0, tmpt = 0.0;
+        int match = -1;
 
-          cout << "going into matchModel" << endl;
+        for(int i = 0; i < modelHist.size(); i++){
+          for(int j = 0; j< modelHist[i].size(); j++){
 
-          double distance = 0.0;
-          int match = 0;
+            int sum =0;
+            for(int q=0;q<modelHist[i][j].rows;q++){
+              sum += modelHist[i][j].at<float>(q,1);
+            }
+            if(sum>1){
+              tmpt = compareHist(modelHist[i][j], novelHist, CV_COMP_CHISQR);
+              cout << "\n\nThis is the difference.. " << tmpt << endl;
 
-          for(int i = 0; i < modelHist.size(); i++){
-            cout << "here.. i: " << i << endl;
-            for(int j = 0; j< modelHist[i].size(); j++){
-              cout << "Inner here.. i: " << i << " j: " << j << endl;
-              cout << "modelHIst is : " << modelHist[i][j].at<float>(10,10) << endl;
-//              cout << "the size: " <<  modelHist[i][j].size() << " and the novelHist: " << novelHist.size() << endl;
-
-              double tmpt = compareHist(modelHist[3][0], novelHist, CV_COMP_CHISQR);
-              cout << "This is tmp: " << tmpt << endl;
               if(tmpt<distance){
                 distance = tmpt;
                 match = i;
                 cout << "found a better match, the new distance is: " << distance << endl;
               }
-                int intDistance = (double) tmpt;
-                cout << "This is the int distance: " << intDistance << endl;
             }
           }
-          if(match == -1){
-            cout << "A match wasn't able to be found.. " << endl;
-          }else {
-            cout << "\n\nThis: " << classes.at(match) << " is the closest match." << endl;
-          }
+        }
+        if(match == -1){
+          cout << "A match wasn't able to be found.. " << endl;
+        }else {
+          cout << "\n\nThis: " << classes.at(match) << " is the closest match." << endl;
+        }
+        cout << "This is the final value: " << distance << endl;
 
-          int value = (double) distance;
-         cout << "This is the final value: " << value << endl;
 
 //          double distance = matchModel(novelHist, modelHist, height, width);
 
-          Mat histImg = showHist(novelHist, textonDictionary.size());
-          namedWindow("testImage", CV_WINDOW_AUTOSIZE);
-          imshow("testImage", histImg);
+        // Mat histImg = showHist(novelHist, textonDictionary.size());
+        // namedWindow("testImage", CV_WINDOW_AUTOSIZE);
+        // imshow("testImage", histImg);
+        // waitKey(2000);
+        // cvDestroyAllWindows();
 
-          // Measure time efficiency
-          auto t4 = std::chrono::high_resolution_clock::now();
-          std::cout << "f() took "
-                    << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()
-                    << " milliseconds\n";
+        // Measure time efficiency
+        // auto t4 = std::chrono::high_resolution_clock::now();
+        // std::cout << "f() took "
+        //           << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()
+        //           << " milliseconds\n";
 
-          waitKey(2000);
-          cvDestroyAllWindows();
-          cont = true;
+        cont = true;
       }
       else if(tmp == "4"){
         cout << "exiting" << endl;
         cont = false;
       } else {
         cout << "that input was not recognised." << endl;
-        cvDestroyAllWindows();
+    //    cvDestroyAllWindows();
         cont = true;
       }
     }while(cont);
