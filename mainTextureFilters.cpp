@@ -552,7 +552,6 @@ void roundTex(vector<float>& tex){
 void removeDups(vector<float>& tex){
     set<float> v;
 
-    // Assigning the size prevents repeatedly calculating it
     unsigned size = tex.size();
 
     for(unsigned i = 0;i<size;i++)
@@ -608,7 +607,8 @@ void createHist(Mat& in, Mat& out, int histSize, const float* histRange, bool un
   bool accumulate = false;
 
   // Compute the histograms:
-  cout << "This is input sze: " << in.size() << " And out size: " << out.size() << endl;
+  cout << "CreateHist: This is input sze: " << in.size() << " And out size: " << out.size() << endl;
+
   calcHist( &in, 1, 0, Mat(), out, 1, &histSize, &histRange, uniform, accumulate );
 }
 
@@ -644,39 +644,69 @@ void binLimits(vector<float> texDict, float* bins, int size){
   cout << "inside binLimits" << endl;
   bins[0] = 0;
 
-  for(int i = 1;i < size;i++){
+  for(int i = 1;i <= size;i++){
       bins[i] = (texDict[i-1] + 0.001);
       cout << "texDict: " << i << " "<< texDict[i-1] << " becomes: " << bins[i] << endl;
   }
-  bins[size] = 255;
+  bins[size+1] = 255;
 }
 
-void savetxtDict(vector<float> dict){
+void savetxtDict(vector<float> dict, float* binArray, int binNum){
   FileStorage fs("txtDict.xml", FileStorage::WRITE);
+
+  // Save texton Dictionary
+  cout << "saving texton dictionary" << endl;
   fs << "TextonDictionary" << "[";
-      cout << "saving texton dictionary" << endl;
-      for(int i =0;i<dict.size();i++)
-        fs << dict[i];
-    fs << "]";
+    for(int i =0;i<dict.size();i++)
+      fs << dict[i];
+  fs << "]";
+
+  // Save Corresponding Bin Array
+  cout << "saving Bin limits" << endl;
+  fs << "binArray" << "[";
+    for(int j=0;j<binNum;j++){
+      fs << binArray[j];
+    }
+  fs << "]";
   fs.release();
 }
 
-void loadTexDict(FileStorage& fs, vector<float>& texDict){
+void loadTex(vector<float>& out){
+  FileStorage fs("txtDict.xml", FileStorage::READ);
+
   FileNode n = fs["TextonDictionary"];
   if(n.type() != FileNode::SEQ){
     cout << "incorrect filetype: " << n.type() << endl;
-
     return;
   }
+
   FileNodeIterator it = n.begin(), it_end = n.end();
   int cnt =0;
   for(;it != it_end;++it){
-    cout << "Read value: " << (float)*it;
-    texDict.push_back((float)*it);
-    cout << "  Saved value: " << texDict[cnt] << endl;
+    out.push_back((float)*it);
     cnt++;
   }
-    cout << "\n\nfinished reading.." << endl;
+  cout << "finished reading Textons..\n\n";
+  fs.release();
+}
+
+void loadBins(float* out){
+  FileStorage fs("txtDict.xml", FileStorage::READ);
+
+  FileNode n = fs["binArray"];
+  if(n.type() != FileNode::SEQ){
+    cout << "incorrect filetype: " << n.type() << endl;
+    return;
+  }
+
+  FileNodeIterator it = n.begin(), it_end = n.end();
+  int cnt =0;
+  for(;it != it_end;++it){
+    out[cnt] = (float)*it;
+    cnt++;
+  }
+  cout << "finished reading Bins..\n\n";
+  fs.release();
 }
 
 void loadHist(mH2& hist){
@@ -748,7 +778,8 @@ void saveHist(mH2 hist){
 }
 
 
-void makeTexDictionary(vector<float>& texDict, mH2 filterbank,  vector<string> classes, int n_sigmas, int n_orientations, string type){
+void makeTexDictionary(mH2 filterbank,  vector<string> classes, int n_sigmas, int n_orientations, string type){
+  vector<float> texDict;
   m3 models(4, m2(8, m1(0)));
   // Create texton dict and store
   createTexDic(filterbank, classes, models, n_sigmas, n_orientations, texDict, type);
@@ -758,8 +789,12 @@ void makeTexDictionary(vector<float>& texDict, mH2 filterbank,  vector<string> c
   roundTex(texDict);
   removeDups(texDict);
 
-  // Store in local dir
-  savetxtDict(texDict);
+  int texDictSize = texDict.size();
+  float binArray[texDictSize];
+  binLimits(texDict, binArray, texDictSize);
+
+  // Store in local dir, texDict+2 to account for starting 0 and finishing 255
+  savetxtDict(texDict, binArray, texDictSize+2);
 }
 
 void displayTexDict(vector<float> texDict){
@@ -782,6 +817,39 @@ void displayTexDict(vector<float> texDict){
   imshow(windowname1,histImg);
   waitKey(0);
   destroyWindow(windowname1);
+  cout << "Leaving DisplayTexDict. " << endl;
+}
+
+void generateModels(mH2 filterbank, vector<float> textonDictionary, const float* binArray, vector<string> classes, int n_sigmas, int n_orientations, string type){
+  m3 models(4, m2(8, m1(0)));
+  mH2 modelHist(10, mH1(10, Mat::zeros(80,1,CV_32FC1)));
+
+  // Return clusters(in models) from filter responses to images in test dirs
+  createTexDic(filterbank, classes, models, n_sigmas, n_orientations, textonDictionary, type);
+
+  // loop through different classes
+  for(int a = 0; a < models.size(); a++){
+    // loop through different models
+    for(int b = 0; b < models[a].size() && models[a][0].size() != 0; b++){
+      if(models[a][b].size()!=0){
+        cout << "starting this loop: " << a << " mini loop number: " << b << endl;
+
+        textonModel(textonDictionary, models[a][b]);
+
+        // Convert array to Mat
+        Mat tmp = Mat::zeros(80, 1, CV_32FC1);
+        textToMat(tmp, models[a][b]);
+
+        // Generate texton histogram and return Mat image and display
+        bool uniform = false;
+
+        createHist(tmp, modelHist[a][b],textonDictionary.size(), binArray, uniform);
+//            Mat histImg = showHist(modelHist[a][b], texDictSize);
+      }
+    }
+  }
+
+    saveHist(modelHist);
 }
 
 int main()
@@ -800,8 +868,6 @@ int main()
 
     // Declare resources
     mH2 filterbank;
-
-    vector<float> textonDictionary;
     const string type[] = {"train/", "test/", "novel/"};
 
     vector<float> sigmas;
@@ -819,9 +885,6 @@ int main()
     filterbank.push_back(bar);
     filterbank.push_back(rot);
 
-    // // plot filters
-    // drawing(edge, bar, rot, n_sigmas, n_orientations);
-
     // --------------------- Texton Dictionary Creation ---------------------- //
     // If statement to reduce const histRange scope, allowing it to be redeclared
     if(true){
@@ -829,126 +892,91 @@ int main()
       cout << "creating texton dictionary" << endl;
 
 
-      textonDictionary.clear();
-      cout << "texton Dictionary cleared. " << endl;
-
 
       // Check for saved Dictionary xml file, generate and save new one if not found
       ifstream savedDict("txtDict.xml");
-      if(!savedDict)
-        makeTexDictionary(textonDictionary, filterbank, classes, n_sigmas, n_orientations, type[0]);
+      if(!savedDict){
+        cout << "\n\n\n\nCAlculating Texton Dicationary..\n\n\n";
+        makeTexDictionary(filterbank, classes, n_sigmas, n_orientations, type[0]);
+      }
 
-      vector<float> newTxtDict;
-      FileStorage fn("txtDict.xml", FileStorage::READ);
+      vector<float> textonDictionary;
+      loadTex(textonDictionary);
 
-      loadTexDict(fn, textonDictionary);
-      fn.release();
+      ifstream savedMod("test123.xml");
+      if(!savedMod){
+        cout << "\n\n\nCAlculating models...\n\n";
+        float binArray[textonDictionary.size()];
+        loadBins(binArray);
+        generateModels(filterbank, textonDictionary, binArray, classes, n_sigmas, n_orientations, type[0]);
+      }
 
       printTexDict(textonDictionary);
       displayTexDict(textonDictionary);
     }
-    int texDictSize = textonDictionary.size();
-    float binArray[texDictSize];
-    binLimits(textonDictionary, binArray, texDictSize);
 
     bool cont = false;
     do{
 
       cout << "\nMenu: Please enter the chosen options number \n"<< endl;
-      cout << "1: texton dictionary creation" << endl;
-      cout << "2: model creation" << endl;
+      cout << "1: ReCalculate Texton Dictionary" << endl;
+      cout << "2: ReCalculate Models" << endl;
       cout << "3: model testing" << endl;
       cout << "4: exit\n" << endl;
 
       string tmp;
       cin >> tmp;
-
-      // --------------------- Model Creation ---------------------- //
-      if(tmp == "2"){
-
-        // If textonDictionary is empty redirect to main
-        if(!textonDictionary.empty()){
-
-          cout << "Creating models" << endl;
-
-          // Measure start time
-          auto t1 = std::chrono::high_resolution_clock::now();
-
-          m3 models(4, m2(8, m1(0)));
-          mH2 modelHist(10, mH1(10, Mat::zeros(80,1,CV_32FC1)));
-
-          // Return clusters(in models) from filter responses to images in test dirs
-          createTexDic(filterbank, classes, models, n_sigmas, n_orientations, textonDictionary, type[1]);
-
-          // loop through different classes
-          for(int a = 0; a < models.size(); a++){
-            // loop through different models
-            for(int b = 0; b < models[a].size() && models[a][0].size() != 0; b++){
-              if(models[a][b].size()!=0){
-                cout << "starting this loop: " << a << " mini loop number: " << b << endl;
-
-                textonModel(textonDictionary, models[a][b]);
-                printModels(models[a]);
-
-                // Convert array to Mat
-                Mat tmp(80, 1, CV_32FC1);
-                textToMat(tmp, models[a][b]);
-
-                const string windowname2 = "models...";
-
-                // Generate texton histogram and return Mat image and display
-                bool uniform = false;
-                createHist(tmp, modelHist[a][b],texDictSize, binArray, uniform);
-
-                for(int i =0;i<modelHist[a][b].rows;i++){
-                  for(int j=0;j<modelHist[a][b].cols;j++)
-                    cout << modelHist[a][b].at<float>(i,j) << ", ";
-                  cout << "nl" << endl;
-                }
-
-//                Mat histImg = showHist(modelHist[a][b], texDictSize);
-
-//                 namedWindow(windowname2, CV_WINDOW_AUTOSIZE);
-//                 imshow(windowname2,histImg);
-// //                waitKey(1000);
-//                 destroyWindow(windowname2);
-              }
-            }
-          }
-          saveHist(modelHist);
-
-         loadHist(modelHist);
-
-
-          // Measure time efficiency
-          auto t2 = std::chrono::high_resolution_clock::now();
-          std::cout << "f() took "
-                    << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-                    << " milliseconds\n";
-
+      if(tmp == "1"){
+          cout << "\n\n-------------------Regenerating TextonDictionary and Bins--------------------\n\n";
+          cout << "ReCalculating Texton Dictionary and saving\n\n";
+          vector<float> textonDictionary;
+          makeTexDictionary(filterbank, classes, n_sigmas, n_orientations, type[0]);
           cont = true;
-          modelsGenerated = true;
-        }
-        else{
-          cout << "\nYou must create the texton library before model creation." << endl;
-          waitKey(1000);
-        }
       }
+      else if(tmp == "2"){
+        // Measure start time
+        auto t1 = std::chrono::high_resolution_clock::now();
+        cout << "\n\n-------------------Regenerating models--------------------\n\n";
 
-      // --------------------- Test Novel Image ---------------------- //
+        // Check for saved Dictionary xml file, generate and save new one if not found
+        ifstream savedDict("txtDict.xml");
+        if(!savedDict)
+          makeTexDictionary(filterbank, classes, n_sigmas, n_orientations, type[1]);
+
+        vector<float> textonDictionary;
+        loadTex(textonDictionary);
+        float binArray[textonDictionary.size()];
+        loadBins(binArray);
+
+        generateModels(filterbank, textonDictionary, binArray, classes, n_sigmas, n_orientations, type[0]);
+
+        // Measure time efficiency
+        auto t2 = std::chrono::high_resolution_clock::now();
+        std::cout << "f() took "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
+                  << " milliseconds\n";
+
+        cont = true;
+        modelsGenerated = true;
+      }
       else if(tmp == "3"){
-        cout << "Entering test mode" << endl;
+        cout << "\n\n-------------------Testing Image Against Models--------------------\n\n";
+        // Measure start time
+        auto t3 = std::chrono::high_resolution_clock::now();
+
+        vector<float> textonDictionary;
+        loadTex(textonDictionary);
+        float binArray[textonDictionary.size()];
+        loadBins(binArray);
 
         m3 models(4, m2(8, m1(0)));
         mH2 modelHist(10, mH1(10, Mat::zeros(80,1,CV_32FC1)));
+
+        loadHist(modelHist);
+
         vector<float> testModel;
 
-        // If textonDictionary is empty redirect to main
-        if(!textonDictionary.empty() && modelsGenerated){
-          // Measure start time
-          auto t3 = std::chrono::high_resolution_clock::now();
 
-          vector<vector<Mat> > response;
 
           Mat inputImg =  imread("../../../TEST_IMAGES/testImage/52a-scale_2_im_8_col.png", CV_LOAD_IMAGE_GRAYSCALE);
           if(!inputImg.data){
@@ -956,9 +984,7 @@ int main()
             return -1;
           }
 
-          namedWindow("testing", CV_WINDOW_AUTOSIZE);
-          imshow("testing", inputImg);
-
+          vector<vector<Mat> > response;
           apply_filterbank(inputImg, filterbank, response, n_sigmas, n_orientations);
           testImgModel(response, testModel);
 
@@ -977,7 +1003,7 @@ int main()
           bool uniform = false;
           cout << "going into create Hist" << endl;
           Mat novelHist;
-          createHist(tmp, novelHist, texDictSize, binArray, uniform);
+          createHist(tmp, novelHist, textonDictionary.size(), binArray, uniform);
 
           cout << "going into matchModel" << endl;
 
@@ -1013,7 +1039,7 @@ int main()
 
 //          double distance = matchModel(novelHist, modelHist, height, width);
 
-          Mat histImg = showHist(novelHist, texDictSize);
+          Mat histImg = showHist(novelHist, textonDictionary.size());
           namedWindow("testImage", CV_WINDOW_AUTOSIZE);
           imshow("testImage", histImg);
 
@@ -1026,13 +1052,6 @@ int main()
           waitKey(2000);
           cvDestroyAllWindows();
           cont = true;
-        }
-        else{
-          cout << "\nYou must create the texton library and models before testing." << endl;
-          waitKey(1000);
-        }
-
-        cont = true;
       }
       else if(tmp == "4"){
         cout << "exiting" << endl;
