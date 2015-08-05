@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<opencv_storage>
+<cluster type_id="opencv-matrix">
+  <rows>10</rows>
+  <cols>1</cols>
+  <dt>f</dt>
+  <data>
+    3.99999999e+01 5.32216644e+01 4.43864708e+01 1.07318321e+02
+    6.82663956e+01 4.85475121e+01 8.27538910e+01 4.06718369e+01
+    5.91401749e+01 1.99354839e+01</data></cluster>
+</opencv_storage>

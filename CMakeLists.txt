@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
-PROJECT(mainTextureFilters)
+PROJECT(imageCollection)
 FIND_PACKAGE(OpenCV REQUIRED)
 FIND_PACKAGE(Boost REQUIRED)
 INCLUDE_DIRECTORIES( ${Boost_INCLUDE_DIR} )
-ADD_EXECUTABLE(${PROJECT_NAME} mainTextureFilters)
+ADD_EXECUTABLE(${PROJECT_NAME} imageCollection)
 ADD_DEFINITIONS(
  -std=c++11
 )
