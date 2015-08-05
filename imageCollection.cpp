@@ -5,8 +5,9 @@
 #include <cstdio> // for printf()
 #include <dirent.h> // For accessing filesystem
 #include <boost/filesystem.hpp>
+#include <sstream>
+// #include <stdlib.h> // for exit() function
 
-//#include <stdlib.h> // for exit() function
 
 using namespace boost::filesystem;
 using namespace std;
@@ -15,8 +16,12 @@ using namespace cv;
 void menuPrint(){
   cout << "\n\n---------------------------------\n";
   cout << "Please enter:\n\n";
-  cout << "'t' for Texton image storage." << endl;
-  cout << "'q' to close the program." << endl;
+  cout << "'1' for storing a Texton image" << endl;
+  cout << "'2' for deleting all current stored Texton images" << endl;
+  cout << "'3' for storing a Model image" << endl;
+  cout << "'4' for deleting all current stored Model images" << endl;
+  cout << "'5' for Novel Image Capture" << endl;
+  cout << "'9' to Close the program." << endl;
   cout << "----------------------------------\n\n";
 }
 
@@ -46,51 +51,124 @@ void listDir(const char *path, vector<string>& dirFiles){
 
 }
 
+// Generate dirs for models, textons and novel images if the dont exist
+void generateDirs(){
+  vector<path> p;
+  p.push_back("./textons");
+  p.push_back("./models");
+  p.push_back("./novel");
+
+  for(int i=0;i<3;i++){
+    if(!exists(p[i]))
+      boost::filesystem::create_directory(p[i]);
+  }
+}
+
+Mat cropImage(Mat img){
+    int h, w, size;
+    h = ((img.rows-200)/2);
+    w = ((img.cols-200)/2);
+    size = 200;
+
+    Mat cropped = img(Rect(w,h,200,200));
+
+    Mat out = cropped.clone();
+    namedWindow("mywindow", CV_WINDOW_AUTOSIZE);
+    imshow("mywindow", cropped);
+}
+
+void saveImage(string path, int num, Mat& img){
+  string type = ".png";
+  stringstream ss;
+  ss << path << num << type;
+  string a = ss.str();
+  cout << "This is the name: " << a << endl;
+
+  Mat out = cropImage(img);
+
+  cout << "here.." << endl;
+  imwrite(a, img);
+}
+
+void clearDir(string a){
+  path p(a);
+  remove_all(p);
+  generateDirs();
+}
+
 int main(int argc, char** argv){
+
+  // The most current image suffix for model and texton images
+  int mod = 0, tex = 0;
+  // Model and texton paths
+  string model, texton, novel;
+  model = "./models/image";
+  texton = "./textons/tex";
+  novel = "./novel/current";
 
   VideoCapture stream(0);
   if(!stream.isOpened()){
     cout << "Video stream unable to be opened exiting.." << endl;
     return -1;
   }
+
   namedWindow("VideoStream", CV_WINDOW_AUTOSIZE);
 
   menuPrint();
+  generateDirs();
 
-  // namedWindow("savedImage", CV_WINDOW_AUTOSIZE);
-  // Mat savedImage;
-  // savedImage =  Mat::zeros(640,480,CV_8UC3);
+  while(true){
+    stringstream ss;
 
-  vector<string> dirFiles;
-  // List current Dir's contents.
-  listDir(".", dirFiles);
+    Mat inputTmp;
+    stream.read(inputTmp);
+    int h, w, size;
+    h = ((inputTmp.rows-200)/2);
+    w = ((inputTmp.cols-200)/2);
+    size = 200;
 
-  cout << "\nThese are teh current files: " << endl;
-  for(int i=0;i<dirFiles.size();i++)
-      cout << dirFiles[i] << ", " << endl;
-  if(argc>1){
-    cout << "This is the arc value: " << argc << endl;
-    exit(1);
+    rectangle(inputTmp, Point(w,h), Point(w+200, h+200),Scalar(0,0,255), 2, 8);
+    imshow("VideoStream", inputTmp);
+    cout << "This is H: " << h << " w: " << w << " inputTmp.size(): " << inputTmp.size() << endl;
+
+    char c = waitKey(300000);
+
+    if(c == '1'){
+      cout << "capturing textons images" << endl;
+      Mat savedImage = inputTmp.clone();
+      saveImage(texton, tex, savedImage);
+      menuPrint();
+      tex++;
+    }else if(c == '2'){
+      cout << "clearing old textons" << endl;
+      clearDir("./textons");
+      menuPrint();
+      tex = 0;
+    }else if(c == '3'){
+      cout << "capturing modelImages" << endl;
+      Mat savedImage = inputTmp.clone();
+      saveImage(model, mod, savedImage);
+      menuPrint();
+      mod++;
+    }else if(c == '4'){
+      cout << "clearing old models" << endl;
+      clearDir("./models");
+      menuPrint();
+      mod = 0;
+    }else if(c == '5'){
+      cout << "collecting novel image"<< endl;
+      clearDir("./novel");
+      Mat savedImage = inputTmp.clone();
+      saveImage(novel, 0, savedImage);
+      menuPrint();
+    }else if(c == '9'){
+      cout << "quitting.. " << endl;
+      break;
+    }else if((int)c != -1){
+      cout << "That input was not recognised." << endl;
+      menuPrint();
+    }
   }
-  cout << "This is the fileSize of argv(1): " << file_size(argv[1]) << endl;
-  cout << create_director(".//boost") << endl;
-
-  // while(true){
-  //   Mat inputTmp;
-  //   stream.read(inputTmp);
-  //   imshow("VideoStream", inputTmp);
-  //   char c = waitKey(30);
-  //
-  //   if(c == 't'){
-  //     cout << "capturing textons images" << endl;
-  //     savedImage = inputTmp.clone();
-  //     imshow("savedImage", savedImage);
-  //     menuPrint();
-  //   }else if(c == 'q'){
-  //     cout << "quitting.. " << endl;
-  //     break;
-  //   }
-  // }
 
   return 0;
 }
