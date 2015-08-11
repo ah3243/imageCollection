@@ -13,55 +13,119 @@ using namespace boost::filesystem;
 using namespace std;
 using namespace cv;
 
+void errorFunc(string input){
+  cerr << "\n\nERROR!: " << input << "\nExiting.\n\n";
+  exit(-1);
+}
+
+void warnFunc(string input){
+  cerr << "\nWARNING!: " << input << endl;
+};
+
+
 void menuPrint(){
   cout << "\n\n---------------------------------\n";
   cout << "Please enter:\n\n";
-  cout << "'1' for storing a Texton image" << endl;
-  cout << "'2' for deleting all current stored Texton images" << endl;
-  cout << "'3' for storing a Model image" << endl;
-  cout << "'4' for deleting all current stored Model images" << endl;
-  cout << "'5' for Novel Image Capture" << endl;
-  cout << "'9' to Close the program." << endl;
+  cout << "'1' for Storing a Texton image" << endl;
+  cout << "'2' for Removing all stored Texton images" << endl;
+
+  cout << "'3' for Add to a Class" << endl;
+  cout << "'4' for Removing a stored Class" << endl;
+  cout << "'5' for Removing all current stored Classes" << endl;
+
+  cout << "'6' for Single centre region Novel Image Capture" << endl;
+  cout << "'7' for Plus config Novel Image Capture" << endl;
+  cout << "'8' to Close the program." << endl;
   cout << "----------------------------------\n\n";
 }
 
-void listDir(const char *inPath, vector<Mat>& dirFiles){
+void getClasses(const char *inPath, map<string, vector<Mat> >& classes){
   DIR *pdir = NULL;
   cout << "inpath : " << inPath << endl;
   pdir = opendir(inPath);
   // Check that dir was initialised correctly
   if(pdir == NULL){
-    cout << "ERROR! unable to open directory, exiting." << endl;
-    exit(1);
+    errorFunc("Unable to open directory.");
   }
   struct dirent *pent = NULL;
 
   // Continue as long as there are still values in the dir list
   while (pent = readdir(pdir)){
     if(pdir==NULL){
-      cout << "ERROR! dir was not initialised correctly, exiting." << endl;
-      exit(3);
+      errorFunc("Dir was not initialised correctly.");
+    }
+
+    // Extract and save img filename without extension
+    stringstream ss;
+    ss << pent->d_name;
+    string fileNme =  ss.str();
+
+    // If not file then continue iteration
+    string dot[] = {".", ".."};
+    if(fileNme.compare(dot[0]) == 0 || fileNme.compare(dot[1]) == 0){
+      continue;
+    }
+    // Get root Class name
+    string cls;
+    int lastIdx = fileNme.find_last_of(".");
+    int classmk = fileNme.find_last_of("_");
+    if(classmk>0){
+      cls = fileNme.substr(0, classmk);
+    } else{
+      cls = fileNme.substr(0, lastIdx);
+    }
+
+    ss.str("");
+    ss << inPath;
+    ss << pent->d_name;
+    string a = ss.str();
+    Mat tmp = imread(a, CV_BGR2GRAY);
+    if(tmp.data){
+      classes[cls].push_back(tmp);
+    }else{
+      warnFunc("Unable to read image.");
+    }
+  }
+  closedir(pdir);
+  cout << "finished Reading Classes.." << endl;
+}
+
+void getTexImgs(const char *inPath, vector<Mat>& textDict){
+  DIR *pdir = NULL;
+  cout << "inpath : " << inPath << endl;
+  pdir = opendir(inPath);
+  // Check that dir was initialised correctly
+  if(pdir == NULL){
+    errorFunc("Unable to open directory.");
+  }
+  struct dirent *pent = NULL;
+
+  // Continue as long as there are still values in the dir list
+  while (pent = readdir(pdir)){
+    if(pdir==NULL){
+      errorFunc("Dir was not initialised correctly.");
     }
     stringstream ss;
     ss << inPath;
     ss << pent->d_name;
     string a = ss.str();
     Mat tmp = imread(a, CV_BGR2GRAY);
-    dirFiles.push_back(tmp);
-    if(!tmp.data){
-      cout << "unable to read image.." << endl;
+    if(tmp.data){
+      textDict.push_back(tmp);
+    }else{
+      warnFunc("Unable to read image.");
     }
   }
   closedir(pdir);
-  cout << "finished Reading Successfully.." << endl;
+  cout << "finished Reading TextonImgs.." << endl;
 }
 
 // Generate dirs for models, textons and novel images if the dont exist
 void generateDirs(){
   vector<path> p;
-  p.push_back("./textons");
-  p.push_back("./models");
-  p.push_back("./novel");
+  p.push_back("../../../TEST_IMAGES/CapturedImgs/textons");
+  p.push_back("../../../TEST_IMAGES/CapturedImgs/classes");
+  p.push_back("../../../TEST_IMAGES/CapturedImgs/novel");
 
   for(int i=0;i<3;i++){
     if(!exists(p[i]))
@@ -82,17 +146,15 @@ void  cropImage(Mat img, Mat& out){
     imshow("SavedImg", cropped);
 }
 
-void saveImage(string path, int num, Mat& img){
+void saveImage(string path, string cls , int num, Mat& img){
   string type = ".png";
   stringstream ss;
-  ss << path << num << type;
+  ss << path << cls << num << type;
   string a = ss.str();
   cout << "This is the name: " << a << endl;
 
   Mat out;
   cropImage(img, out);
-
-  cout << "here.." << endl;
   imwrite(a, out);
 }
 
@@ -102,50 +164,48 @@ void clearDir(string a){
   generateDirs();
 }
 
-int main(int argc, char** argv){
-  string basePath = "../../../TEST_IMAGES/kth-tips/";
-  vector<string> extPath = {"bread/", "cotton/", "cork/"};
-  typedef vector<Mat> mV;
-  mV txtons(100, Mat(200,200, CV_32FC1));
-  mV bread (10,Mat(200,200,CV_32FC1));
-  mV cotton (10, Mat(200,200,CV_32FC1));
-  mV cork (10, Mat(200,200,CV_32FC1));
+int clearClass(string cls){
+  namespace fs = boost::filesystem;
+  path classes("../../../TEST_IMAGES/CapturedImgs/classes/");
+  directory_iterator end_iter;
 
-  int cnt = 0;
-  for(int i=0;i<4;i++){
-    stringstream ss;
-    ss << basePath;
-    ss << extPath[cnt];
-    ss << "train/";
-    string b = ss.str();
-    const char* a = b.c_str();
-    cout << "this is the path.. " << a << endl;
+  if(fs::exists(classes) && fs::is_directory(classes)){
+    for(directory_iterator it(classes);it != end_iter;++it){
+      string tmp = it-> path().string();
+      string delim[]= {"/","_", "."};
+      string name;
+      int start = tmp.find_last_of(delim[0])+1;
+      int end = tmp.find_last_of(delim[1]);
+      cout << "end: " << end;
+      if(end>0){
+        cout << "insidde..";
 
-    switch(i){
-      case 0:
-      cout << "number: " << i << endl;
-      listDir("../../../TEST_IMAGES/kth-tips/textons/",txtons);
-      cnt--;
-      break;
-
-      case 1:
-      cout << "number: " << i << endl;
-      listDir(a,bread);
-      break;
-
-      case 2:
-      cout << "number: " << i << endl;
-      listDir(a,cotton);
-      break;
-
-      case 3:
-      cout << "number: " << i << endl;
-      listDir(a,cork);
-      break;
+        name =  tmp.substr(start,end-start);
+      }else{
+        end = tmp.find_last_of(delim[2]);
+        name = tmp.substr(start,end-start);
+      }
+      cout << "These are the names: " << name << endl;
+      if(name.compare(cls)==0){
+        fs::remove(tmp);
+      }
     }
-    cnt ++;
+    cout << "\n";
   }
-  cout << "This is the size of textons: " << txtons[0].size() << ", bread: " << bread.size() << ", cotton: " << cotton.size() << ", cork: " << cork.size() << endl;
+}
+
+int main(int argc, char** argv){
+  string basePath = "../../../TEST_IMAGES/CapturedImgs/";
+  map<string, vector<Mat> > classes;
+  vector<Mat> txtons;
+
+  generateDirs();
+
+  // Import texton dictionary
+  getTexImgs("../../../TEST_IMAGES/CapturedImgs/textons/", txtons);
+
+  // Import models
+  getClasses("../../../TEST_IMAGES/CapturedImgs/classes/",classes);
 
   // The most current image suffix for model and texton images
   int mod = 0, tex = 0;
@@ -164,7 +224,6 @@ int main(int argc, char** argv){
   namedWindow("VideoStream", CV_WINDOW_AUTOSIZE);
 
   menuPrint();
-  generateDirs();
 
   while(true){
     stringstream ss;
@@ -182,34 +241,46 @@ int main(int argc, char** argv){
     char c = waitKey(30);
 
     if(c == '1'){
-      cout << "capturing textons images" << endl;
+      cout << "Storing a Texton image" << endl;
       Mat savedImage = inputTmp.clone();
-      saveImage(texton, tex, savedImage);
+      saveImage(texton, "", tex, savedImage);
       menuPrint();
       tex++;
     }else if(c == '2'){
-      cout << "clearing old textons" << endl;
+      cout << "Removing all Stored Textons" << endl;
       clearDir("./textons");
       menuPrint();
       tex = 0;
     }else if(c == '3'){
-      cout << "capturing modelImages" << endl;
+      cout << "Adding to a Class" << endl;
+      cout << "\nPlease input the name of the class." << endl;
+      string cls;
+      cin >> cls;
+
       Mat savedImage = inputTmp.clone();
-      saveImage(model, mod, savedImage);
+
+      saveImage(model, cls , mod, savedImage);
       menuPrint();
-      mod++;
     }else if(c == '4'){
-      cout << "clearing old models" << endl;
-      clearDir("./models");
+      cout << "Removing a Stored Class" << endl;
+      cout << "\nWhich class would you like to remove:" << endl;
+      string cls;
+      cin >> cls;
+      clearClass(cls);
       menuPrint();
       mod = 0;
     }else if(c == '5'){
+      cout << "Removing all stored Classes"<< endl;
+      clearDir("./classes");
+      menuPrint();
+      mod = 0;
+    }else if(c == '6'){
       cout << "collecting novel image"<< endl;
       clearDir("./novel");
       Mat savedImage = inputTmp.clone();
-      saveImage(novel, 0, savedImage);
+      saveImage(novel, "", 0, savedImage);
       menuPrint();
-    }else if(c == '9'){
+    }else if(c == '8'){
       cout << "quitting.. " << endl;
       break;
     }else if((int)c != -1){
