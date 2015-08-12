@@ -6,6 +6,7 @@
 #include <dirent.h> // For accessing filesystem
 #include <boost/filesystem.hpp>
 #include <sstream>
+#include <boost/algorithm/string.hpp> // for to_lower function in main
 // #include <stdlib.h> // for exit() function
 
 
@@ -26,11 +27,66 @@ void warnFunc(string input){
 void menuPrint(){
   cout << "\n\n---------------------------------\n";
   cout << "Please enter the keyword for you option:\n\n";
-  cout << "0. TextonMenu" << endl;
-  cout << "1. ClassMenu" << endl;
-  cout << "2. NovelImage" << endl;
+  cout << "0. Texton" << endl;
+  cout << "1. Class" << endl;
+  cout << "2. Novel" << endl;
   cout << "3. Quit" << endl;
   cout << "----------------------------------\n\n";
+}
+
+void extractClsNme(string &nme){
+  string tmp = nme;
+  string delim[]= {"/","_", "."};
+  int start = tmp.find_last_of(delim[0])+1;
+  int end = tmp.find_last_of(delim[1]);
+  if(end>0){
+    nme =  tmp.substr(start,end-start);
+  }else{
+    end = tmp.find_last_of(delim[2]);
+    nme = tmp.substr(start,end-start);
+  }
+}
+void extractFullNme(string &nme){
+  string tmp = nme;
+  string delim[]= {"/", "."};
+  int start = tmp.find_last_of(delim[0])+1;
+  int end = tmp.find_last_of(delim[1]);
+  nme = tmp.substr(start,end-start);
+}
+
+int getSuffix(string p){
+  int suf;
+  string tmp;
+  suf = p.find_last_of("_");
+  if(suf>0){
+    tmp = p.substr(suf+1, p.length());
+    return atoi(tmp.c_str());
+  }else{
+    return 0;
+  }
+}
+
+int getHighestSuffix(path p, string cls){
+  if(!exists(p) || !is_directory(p)){
+    cout << "The entered path was not valid. Returning." << endl;
+    return -1;
+  }
+  string fullNme, clsRoot;
+  int highVal = 0, tmpVal;
+  directory_iterator itr_end;
+  for(directory_iterator itr(p);itr != itr_end;++itr){
+    fullNme = itr -> path().string();
+    clsRoot = fullNme;
+    extractFullNme(fullNme);
+    extractClsNme(clsRoot);
+    if(clsRoot.compare(cls) == 0){
+      tmpVal = getSuffix(fullNme);
+      if(highVal < tmpVal){
+        highVal = tmpVal;
+      }
+    }
+  }
+  return highVal;
 }
 
 void getClasses(const char *inPath, map<string, vector<Mat> >& classes){
@@ -60,14 +116,7 @@ void getClasses(const char *inPath, map<string, vector<Mat> >& classes){
       continue;
     }
     // Get root Class name
-    string cls;
-    int lastIdx = fileNme.find_last_of(".");
-    int classmk = fileNme.find_last_of("_");
-    if(classmk>0){
-      cls = fileNme.substr(0, classmk);
-    } else{
-      cls = fileNme.substr(0, lastIdx);
-    }
+    extractClsNme(fileNme);
 
     ss.str("");
     ss << inPath;
@@ -75,7 +124,7 @@ void getClasses(const char *inPath, map<string, vector<Mat> >& classes){
     string a = ss.str();
     Mat tmp = imread(a, CV_BGR2GRAY);
     if(tmp.data){
-      classes[cls].push_back(tmp);
+      classes[fileNme].push_back(tmp);
     }else{
       warnFunc("Unable to read image.");
     }
@@ -129,27 +178,31 @@ void generateDirs(){
 
 void  cropImage(Mat img, Mat& out){
     int h, w, size;
-    h = ((img.rows-20)/2);
-    w = ((img.cols-20)/2);
-    size = 20;
+    h = ((img.rows-200)/2);
+    w = ((img.cols-200)/2);
+    size = 200;
 
-    Mat cropped = img(Rect(w,h,20,20));
+    Mat cropped = img(Rect(w,h,200,200));
 
     out = cropped.clone();
-    namedWindow("SavedImg", CV_WINDOW_AUTOSIZE);
-    imshow("SavedImg", cropped);
 }
 
-void saveImage(string path, string cls , int num, Mat& img){
-  string type = ".png";
-  stringstream ss;
-  ss << path << cls << num << type;
-  string a = ss.str();
-  cout << "This is the name: " << a << endl;
-
-  Mat out;
-  cropImage(img, out);
-  imwrite(a, out);
+void saveImage(string path, string cls , int num, vector<Mat>& img){
+  string type = ".png", delim = "_", dir;
+  if(!exists(path) || !is_directory(path)){
+    cout << "Path was not valid. Returning. " << path << endl;
+    return;
+  }
+  for(int i=0;i<img.size();i++){
+    stringstream ss;
+    string a = path;
+    ss << cls << delim << num+i << type;
+    a += ss.str();
+    cout << "This is the name: " << a << endl;
+    cout << "this is the size(): " << img[i].size() << endl;
+    cout << "and the number: " << img.size() << endl;
+    imwrite(a, img[i]);
+  }
 }
 
 void clearDir(string a){
@@ -166,72 +219,16 @@ int clearClass(string cls){
   if(fs::exists(classes) && fs::is_directory(classes)){
     for(directory_iterator it(classes);it != end_iter;++it){
       string tmp = it-> path().string();
-      string delim[]= {"/","_", "."};
-      string name;
-      int start = tmp.find_last_of(delim[0])+1;
-      int end = tmp.find_last_of(delim[1]);
-      cout << "end: " << end;
-      if(end>0){
-        cout << "insidde..";
+      string name = tmp;
+      extractClsNme(name);
 
-        name =  tmp.substr(start,end-start);
-      }else{
-        end = tmp.find_last_of(delim[2]);
-        name = tmp.substr(start,end-start);
-      }
-      cout << "These are the names: " << name << endl;
-      if(name.compare(cls)==0){
+      // remove if it matches target, if no target the remove all
+      if(cls.size() == 0 || name.compare(cls)==0){
         fs::remove(tmp);
       }
     }
     cout << "\n";
   }
-}
-
-int main(int argc, char** argv){
-  string basePath = "../../../TEST_IMAGES/CapturedImgs/";
-  map<string, vector<Mat> > classes;
-  vector<Mat> txtons;
-
-  generateDirs();
-
-  // Import texton dictionary
-  getTexImgs("../../../TEST_IMAGES/CapturedImgs/textons/", txtons);
-
-  // Import models
-  getClasses("../../../TEST_IMAGES/CapturedImgs/classes/",classes);
-
-  // The most current image suffix for model and texton images
-  int mod = 0, tex = 0;
-  // Model and texton paths
-  string model, texton, novel;
-  model = "./models/image";
-  texton = "./textons/tex";
-  novel = "./novel/current";
-
-  namedWindow("VideoStream", CV_WINDOW_AUTOSIZE);
-
-  string capture;
-  while(true){
-
-    menuPrint();
-    cout << "Balh\n--" << capture << "--\n";
-    cin >> capture;
-    cin.ignore(); // only collect a single word
-      if(capture.compare("TextonMenu")==0){
-        cout << "trex\n";
-      }else if(capture.compare("ClassMenu")==0){
-        cout << "class\n";
-      }else if(capture.compare("NovelImage")==0){
-        cout << "novelImgs";
-      }else if(capture.compare("Quit")==0){
-        cout << "quitting\n";
-        return 0;
-      }else{
-        cout << "Your input was not recognised.\n" << endl;
-      }
-    }
-  return 0;
 }
 
 void printgetImageMenu(){
@@ -251,7 +248,8 @@ void getImages(vector<Mat>& matArr){
     cout << "Video stream unable to be opened exiting.." << endl;
     exit(0);
   }
-
+  namedWindow("VideoStream",CV_WINDOW_AUTOSIZE);
+  Mat out;
   while(true){
     Mat inputTmp;
     stream.read(inputTmp);
@@ -260,23 +258,47 @@ void getImages(vector<Mat>& matArr){
     w = ((inputTmp.cols-200)/2);
     size = 200;
 
-    rectangle(inputTmp, Point(w,h), Point(w+200, h+200),Scalar(0,0,255), 2, 8);
     imshow("VideoStream", inputTmp);
-    char c = waitKey(30);
-
+    rectangle(inputTmp, Point(w,h), Point(w+200, h+200),Scalar(0,0,255), 2, 8);
+    char c = waitKey(50);
     switch (c) {
-      case 0:
+      case '0':
         cout << "Capturing Image\n";
-        local.push_back(inputTmp);
+        out = Scalar(0);
+        cropImage(inputTmp, out);
+        local.push_back(out);
         break;
-      case 1:
+      case '1':
         cout << "Saving and Returning\n";
         for(int i=0;i<local.size();i++)
           matArr.push_back(local[i]);
-        break;
-      case 2:
-        cout << "Discarding and Returning\n";
+          cvDestroyAllWindows();
         return;
+      case '2':
+        cout << "Discarding and Returning\n";
+        cvDestroyAllWindows();
+        return;
+    }
+  }
+}
+
+void retnFileNmes(path p, string name, vector<string>& matches){
+  if(exists(p)){
+    if(is_regular_file(p)){
+      cout << "This is a single file not directory. Returning.\n";
+    }else if(is_directory(p)){
+      int c;
+      directory_iterator dir_end;
+      for(directory_iterator itr(p);itr != dir_end;++itr){
+        string tmp = itr -> path().string();
+        string cls = tmp;
+        extractClsNme(cls);
+        extractFullNme(tmp);
+        // Add to return vector if it matches class or there was no class input
+        if(name.size()==0 || cls.compare(name)==0){
+          matches.push_back(tmp);
+        }
+      }
     }
   }
 }
@@ -290,31 +312,39 @@ void printNovelImgMenu(){
 }
 
 void novelImgHandler(){
-    cout << "\n........Entering textonHandler........\n\n";
-    printNovelImgMenu();
-    while(true){
-      char c = waitKey();
-      switch (c) {
-        case 0:
-          cout << "Listing Number of Novel images\n";
-          printNovelImgMenu();
-          break;
-        case 1:
-          cout << "Starting Novel image collection\n";
-          clearDir("./novel");
-//          Mat savedImage = inputTmp.clone();
-//          saveImage(novel, "", 0, savedImage);
-          printNovelImgMenu();
-          break;
-        case 2:
-          cout << "Clearing All Novel images\n";
-          printNovelImgMenu();
-          break;
-        case 'q':
-          cout << "\nExiting to main\n";
-          return;
-      }
+  cout << "\n........Entering textonHandler........\n\n";
+   cvStartWindowThread(); // Start the window thread(essential for deleting windows)
+  string novel = "../../../TEST_IMAGES/CapturedImgs/novel/";
+  vector<Mat> imgArr;
+  vector<string> fileNmes;
+  printNovelImgMenu();
+  while(true){
+    char c;
+    cin >> c;
+    switch (c) {
+      case '0':
+        cout << "Listing Number of Novel images\n";
+        retnFileNmes(novel, "", fileNmes);
+        cout << "There are currently: " << fileNmes.size() << " in the dir." << endl;
+        printNovelImgMenu();
+        break;
+      case '1':
+        cout << "Starting Novel image collection\n";
+        imgArr.clear();
+        getImages(imgArr);
+        saveImage(novel, "novelImg", 0, imgArr);
+        printNovelImgMenu();
+        break;
+      case '2':
+        cout << "Clearing All Novel images\n";
+        clearDir(novel);
+        printNovelImgMenu();
+        break;
+      case 'q':
+        cout << "\nExiting to main\n";
+        return;
     }
+  }
 }
 
 void printTextonMenu(){
@@ -361,25 +391,36 @@ void printClassMenu(){
 
 void classHandler(){
   cout << "\n........Entering classHandler........\n\n";
+
+  string clsPath = "../../../TEST_IMAGES/CapturedImgs/classes/";
   string cls;
+  vector<Mat> imgArr;
   printClassMenu();
   while(true){
-    char c = waitKey();
+    char c;
+    cin >> c;
     switch (c) {
       case '0':
         cout << "Listing Classes" << endl;
         break;
       case '1':
-        cout << "Adding to a Class" << endl;
+        cout << "Adding a Class" << endl;
         cout << "\nPlease input the name of the class." << endl;
         cls = "";
         cin >> cls;
-//        Mat savedImage = inputTmp.clone();
-//        saveImage(model, cls , mod, savedImage);
+        getImages(imgArr);
+        cout << "This is the arrSize: " << imgArr.size() << endl;
+        saveImage(clsPath, cls, 0, imgArr);
+        imgArr.clear();
         printClassMenu();
         break;
       case '2':
         cout << "Appending to a Class" << endl;
+        cout << "\nPlease input the name of the class." << endl;
+        cls = "";
+        cin >> cls;
+        cout << "This is the highest value: " << getHighestSuffix(clsPath, cls) << endl;
+        printClassMenu();
         break;
       case '3':
         cout << "Removing a Class" << endl;
@@ -391,8 +432,7 @@ void classHandler(){
         break;
       case '4':
         cout << "Removing all Classes" << endl;
-        cout << "Removing all stored Classes"<< endl;
-//        clearDir("./classes");
+        clearClass("");
         printClassMenu();
         break;
       case 'q':
@@ -400,4 +440,33 @@ void classHandler(){
         return;
     }
   }
+}
+
+int main(int argc, char** argv){
+  generateDirs();
+
+  string capture;
+  while(true){
+    menuPrint();
+
+    cin >> capture;
+    boost::algorithm::to_lower(capture);
+    cin.ignore(); // only collect a single word
+
+    if(capture.compare("texton")==0){
+      cout << "trex\n";
+    }else if(capture.compare("class")==0){
+      cout << "class\n";
+      classHandler();
+    }else if(capture.compare("novel")==0){
+      cout << "novelImgs";
+      novelImgHandler();
+    }else if(capture.compare("quit")==0){
+      cout << "quitting\n";
+      return 0;
+    }else{
+      cout << "Your input of: " << capture << " was not recognised.\n" << endl;
+    }
+  }
+  return 0;
 }
