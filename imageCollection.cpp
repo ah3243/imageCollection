@@ -25,17 +25,11 @@ void warnFunc(string input){
 
 void menuPrint(){
   cout << "\n\n---------------------------------\n";
-  cout << "Please enter:\n\n";
-  cout << "'1' for Storing a Texton image" << endl;
-  cout << "'2' for Removing all stored Texton images" << endl;
-
-  cout << "'3' for Add to a Class" << endl;
-  cout << "'4' for Removing a stored Class" << endl;
-  cout << "'5' for Removing all current stored Classes" << endl;
-
-  cout << "'6' for Single centre region Novel Image Capture" << endl;
-  cout << "'7' for Plus config Novel Image Capture" << endl;
-  cout << "'8' to Close the program." << endl;
+  cout << "Please enter the keyword for you option:\n\n";
+  cout << "0. TextonMenu" << endl;
+  cout << "1. ClassMenu" << endl;
+  cout << "2. NovelImage" << endl;
+  cout << "3. Quit" << endl;
   cout << "----------------------------------\n\n";
 }
 
@@ -215,19 +209,50 @@ int main(int argc, char** argv){
   texton = "./textons/tex";
   novel = "./novel/current";
 
+  namedWindow("VideoStream", CV_WINDOW_AUTOSIZE);
+
+  string capture;
+  while(true){
+
+    menuPrint();
+    cout << "Balh\n--" << capture << "--\n";
+    cin >> capture;
+    cin.ignore(); // only collect a single word
+      if(capture.compare("TextonMenu")==0){
+        cout << "trex\n";
+      }else if(capture.compare("ClassMenu")==0){
+        cout << "class\n";
+      }else if(capture.compare("NovelImage")==0){
+        cout << "novelImgs";
+      }else if(capture.compare("Quit")==0){
+        cout << "quitting\n";
+        return 0;
+      }else{
+        cout << "Your input was not recognised.\n" << endl;
+      }
+    }
+  return 0;
+}
+
+void printgetImageMenu(){
+  cout << "\nGet Image Menu:\nPlease enter the number of your chosen option\n";
+  cout << "0 Capture Image\n";
+  cout << "1 Save and Quit\n";
+  cout << "2 Discard and Quit\n";
+  cout << "\n";
+}
+
+void getImages(vector<Mat>& matArr){
+  printgetImageMenu();
+  vector<Mat> local;
+
   VideoCapture stream(0);
   if(!stream.isOpened()){
     cout << "Video stream unable to be opened exiting.." << endl;
-    return -1;
+    exit(0);
   }
 
-  namedWindow("VideoStream", CV_WINDOW_AUTOSIZE);
-
-  menuPrint();
-
   while(true){
-    stringstream ss;
-
     Mat inputTmp;
     stream.read(inputTmp);
     int h, w, size;
@@ -237,57 +262,142 @@ int main(int argc, char** argv){
 
     rectangle(inputTmp, Point(w,h), Point(w+200, h+200),Scalar(0,0,255), 2, 8);
     imshow("VideoStream", inputTmp);
-
     char c = waitKey(30);
 
-    if(c == '1'){
-      cout << "Storing a Texton image" << endl;
-      Mat savedImage = inputTmp.clone();
-      saveImage(texton, "", tex, savedImage);
-      menuPrint();
-      tex++;
-    }else if(c == '2'){
-      cout << "Removing all Stored Textons" << endl;
-      clearDir("./textons");
-      menuPrint();
-      tex = 0;
-    }else if(c == '3'){
-      cout << "Adding to a Class" << endl;
-      cout << "\nPlease input the name of the class." << endl;
-      string cls;
-      cin >> cls;
-
-      Mat savedImage = inputTmp.clone();
-
-      saveImage(model, cls , mod, savedImage);
-      menuPrint();
-    }else if(c == '4'){
-      cout << "Removing a Stored Class" << endl;
-      cout << "\nWhich class would you like to remove:" << endl;
-      string cls;
-      cin >> cls;
-      clearClass(cls);
-      menuPrint();
-      mod = 0;
-    }else if(c == '5'){
-      cout << "Removing all stored Classes"<< endl;
-      clearDir("./classes");
-      menuPrint();
-      mod = 0;
-    }else if(c == '6'){
-      cout << "collecting novel image"<< endl;
-      clearDir("./novel");
-      Mat savedImage = inputTmp.clone();
-      saveImage(novel, "", 0, savedImage);
-      menuPrint();
-    }else if(c == '8'){
-      cout << "quitting.. " << endl;
-      break;
-    }else if((int)c != -1){
-      cout << "That input was not recognised." << endl;
-      menuPrint();
+    switch (c) {
+      case 0:
+        cout << "Capturing Image\n";
+        local.push_back(inputTmp);
+        break;
+      case 1:
+        cout << "Saving and Returning\n";
+        for(int i=0;i<local.size();i++)
+          matArr.push_back(local[i]);
+        break;
+      case 2:
+        cout << "Discarding and Returning\n";
+        return;
     }
   }
+}
 
-  return 0;
+void printNovelImgMenu(){
+  cout << "\nNovel Image Menu:\nPlease enter the number of your chosen option\n";
+  cout << "0 List number of Novel images\n";
+  cout << "1 Collect new Novel Images\n";
+  cout << "2 Clear all Novel Images\n";
+  cout << "q Return to Main Menu\n";
+}
+
+void novelImgHandler(){
+    cout << "\n........Entering textonHandler........\n\n";
+    printNovelImgMenu();
+    while(true){
+      char c = waitKey();
+      switch (c) {
+        case 0:
+          cout << "Listing Number of Novel images\n";
+          printNovelImgMenu();
+          break;
+        case 1:
+          cout << "Starting Novel image collection\n";
+          clearDir("./novel");
+//          Mat savedImage = inputTmp.clone();
+//          saveImage(novel, "", 0, savedImage);
+          printNovelImgMenu();
+          break;
+        case 2:
+          cout << "Clearing All Novel images\n";
+          printNovelImgMenu();
+          break;
+        case 'q':
+          cout << "\nExiting to main\n";
+          return;
+      }
+    }
+}
+
+void printTextonMenu(){
+  cout << "\nTexton Menu:\nPlease enter the number of your chosen option\n";
+  cout << "0 List number of Textons\n";
+  cout << "1 Add new texton images\n";
+  cout << "2 Clear all stored Textons\n";
+  cout << "q Return to Main Menu\n";
+  cout << "\n";
+}
+
+void textonHandler(){
+  cout << "\n........Entering textonHandler........\n\n";
+  printTextonMenu();
+  while(true){
+    char c = waitKey();
+    switch(c){
+      case 1:
+        cout << "Storing a Texton image" << endl;
+//        Mat savedImage = inputTmp.clone();
+//        saveImage(texton, "", tex, savedImage);
+        printTextonMenu();
+      case 2:
+        cout << "Removing all Stored Textons" << endl;
+        clearDir("./textons");
+        printTextonMenu();
+      case 'q':
+        cout << "\nExiting to main\n";
+        return;
+    }
+  }
+}
+
+void printClassMenu(){
+  cout << "\nClass Menu:\nPlease enter the number of your chosen option\n";
+  cout << "0 List all classes\n";
+  cout << "1 Add a Class\n";
+  cout << "2 Append to a Class\n";
+  cout << "3 Remove a Class\n";
+  cout << "4 Remove all Stored Classes\n";
+  cout << "q Return to Main Menu\n";
+  cout << "\n";
+}
+
+void classHandler(){
+  cout << "\n........Entering classHandler........\n\n";
+  string cls;
+  printClassMenu();
+  while(true){
+    char c = waitKey();
+    switch (c) {
+      case '0':
+        cout << "Listing Classes" << endl;
+        break;
+      case '1':
+        cout << "Adding to a Class" << endl;
+        cout << "\nPlease input the name of the class." << endl;
+        cls = "";
+        cin >> cls;
+//        Mat savedImage = inputTmp.clone();
+//        saveImage(model, cls , mod, savedImage);
+        printClassMenu();
+        break;
+      case '2':
+        cout << "Appending to a Class" << endl;
+        break;
+      case '3':
+        cout << "Removing a Class" << endl;
+        cout << "\nWhich class would you like to remove:" << endl;
+        cls = "";
+        cin >> cls;
+        clearClass(cls);
+        printClassMenu();
+        break;
+      case '4':
+        cout << "Removing all Classes" << endl;
+        cout << "Removing all stored Classes"<< endl;
+//        clearDir("./classes");
+        printClassMenu();
+        break;
+      case 'q':
+          cout << "\nExiting to main\n";
+        return;
+    }
+  }
 }
