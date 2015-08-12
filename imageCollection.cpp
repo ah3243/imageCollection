@@ -89,48 +89,36 @@ int getHighestSuffix(path p, string cls){
   return highVal;
 }
 
-void getClasses(const char *inPath, map<string, vector<Mat> >& classes){
-  DIR *pdir = NULL;
-  cout << "inpath : " << inPath << endl;
-  pdir = opendir(inPath);
-  // Check that dir was initialised correctly
-  if(pdir == NULL){
-    errorFunc("Unable to open directory.");
+void getUniqueClassNme(path p, vector<string>& classes){
+  if(!exists(p) || !is_directory(p)){
+    cout << "the entered path was not valid. Returning." << endl;
+    exit(-1);
   }
-  struct dirent *pent = NULL;
 
-  // Continue as long as there are still values in the dir list
-  while (pent = readdir(pdir)){
-    if(pdir==NULL){
-      errorFunc("Dir was not initialised correctly.");
+  string nme;
+  directory_iterator itr_end;
+  for(directory_iterator itr(p); itr != itr_end; ++itr){
+    int unique = 0;
+    nme = itr -> path().string();
+    extractClsNme(nme);
+
+    for(int i=0;i<classes.size();i++){
+      if(nme.compare(classes[i])==0){
+        unique = 1;
+      }
     }
-
-    // Extract and save img filename without extension
-    stringstream ss;
-    ss << pent->d_name;
-    string fileNme =  ss.str();
-
-    // If not file then continue iteration
-    string dot[] = {".", ".."};
-    if(fileNme.compare(dot[0]) == 0 || fileNme.compare(dot[1]) == 0){
-      continue;
-    }
-    // Get root Class name
-    extractClsNme(fileNme);
-
-    ss.str("");
-    ss << inPath;
-    ss << pent->d_name;
-    string a = ss.str();
-    Mat tmp = imread(a, CV_BGR2GRAY);
-    if(tmp.data){
-      classes[fileNme].push_back(tmp);
-    }else{
-      warnFunc("Unable to read image.");
+    if(unique == 0 ){
+      classes.push_back(nme);
     }
   }
-  closedir(pdir);
-  cout << "finished Reading Classes.." << endl;
+}
+
+void printClasses(vector<string> s){
+  cout << "\n\nBelow are your current Classes:\n";
+  for(int i;i<s.size();i++){
+    cout << i << ": " << s[i] << endl;
+  }
+  cout << "\n";
 }
 
 void getTexImgs(const char *inPath, vector<Mat>& textDict){
@@ -197,6 +185,7 @@ void saveImage(string path, string cls , int num, vector<Mat>& img){
     stringstream ss;
     string a = path;
     ss << cls << delim << num+i << type;
+    cout << "This is the num: " << num << endl;
     a += ss.str();
     cout << "This is the name: " << a << endl;
     cout << "this is the size(): " << img[i].size() << endl;
@@ -272,14 +261,14 @@ void getImages(vector<Mat>& matArr){
         cout << "Saving and Returning\n";
         for(int i=0;i<local.size();i++)
           matArr.push_back(local[i]);
-          cvDestroyAllWindows();
+    //      cvDestroyAllWindows();
         return;
       case '2':
         cout << "Discarding and Returning\n";
-        cvDestroyAllWindows();
         return;
     }
   }
+  cvDestroyWindow("VideoStream");
 }
 
 void retnFileNmes(path p, string name, vector<string>& matches){
@@ -394,7 +383,9 @@ void classHandler(){
 
   string clsPath = "../../../TEST_IMAGES/CapturedImgs/classes/";
   string cls;
+  int highVal;
   vector<Mat> imgArr;
+  vector<string> clssNmes;
   printClassMenu();
   while(true){
     char c;
@@ -402,6 +393,10 @@ void classHandler(){
     switch (c) {
       case '0':
         cout << "Listing Classes" << endl;
+        getUniqueClassNme(clsPath, clssNmes);
+        printClasses(clssNmes);
+        cout << "THis is the total number of class names: " << clssNmes.size() << endl;
+        printClassMenu();
         break;
       case '1':
         cout << "Adding a Class" << endl;
@@ -419,7 +414,10 @@ void classHandler(){
         cout << "\nPlease input the name of the class." << endl;
         cls = "";
         cin >> cls;
-        cout << "This is the highest value: " << getHighestSuffix(clsPath, cls) << endl;
+        highVal =  getHighestSuffix(clsPath, cls);
+        getImages(imgArr);
+        saveImage(clsPath, cls, highVal, imgArr);
+        imgArr.clear();
         printClassMenu();
         break;
       case '3':
